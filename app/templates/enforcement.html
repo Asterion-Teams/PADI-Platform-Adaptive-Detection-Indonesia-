@@ -1,0 +1,762 @@
+{% extends "base.html" %}
+{% block title %}PADI - Enforcement (E-TLE){% endblock %}
+{% block header_kicker %}Enforcement{% endblock %}
+{% block header_title %}Intelligent Traffic Enforcement & Behaviour Analysis{% endblock %}
+{% block header_actions %}
+    <a href="/zones" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+        <i class="fas fa-draw-polygon text-sky-300"></i>
+        <span>Zone Editor</span>
+    </a>
+    <button id="btn-clear-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-red-500/40">
+        <i class="fas fa-trash text-red-300"></i>
+        <span>Clear Data</span>
+    </button>
+    <button id="btn-export-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-purple-500/40">
+        <i class="fas fa-file-csv text-purple-300"></i>
+        <span>Export CSV</span>
+    </button>
+{% endblock %}
+{% block head_extra %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+{% endblock %}
+{% block style_extra %}
+<style>
+    .v-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; }
+    .leaflet-popup-content-wrapper { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
+    .leaflet-popup-content { margin: 0 !important; }
+    .leaflet-popup-tip { background: #0f172a !important; }
+    .leaflet-popup-close-button { color: #64748b !important; top: 6px !important; right: 8px !important; }
+    .v-illegal_parking { background: rgba(220,38,38,0.18); color: #fca5a5; border: 1px solid rgba(220,38,38,0.35); }
+    .v-busway_occupancy { background: rgba(249,115,22,0.18); color: #fdba74; border: 1px solid rgba(249,115,22,0.35); }
+    .v-bicycle_lane_occupancy { background: rgba(6,182,212,0.18); color: #67e8f9; border: 1px solid rgba(6,182,212,0.35); }
+    .v-illegal_pickup_dropoff { background: rgba(234,179,8,0.18); color: #fde68a; border: 1px solid rgba(234,179,8,0.35); }
+    .v-wrong_way { background: rgba(168,85,247,0.18); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.35); }
+    .v-default { background: rgba(148,163,184,0.18); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.35); }
+    .status-pending { color: #fde68a; }
+    .status-dispatched { color: #93c5fd; }
+    .status-resolved { color: #86efac; }
+    .status-rejected { color: #fca5a5; }
+    #heatmap { height: 420px; border-radius: 12px; }
+    .mini-card { background: rgba(2,6,23,0.45); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 12px 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+
+    <!-- Period selector -->
+    <div class="glass-panel p-3 flex flex-wrap items-center gap-2">
+        <span class="text-xs text-slate-400 pl-2">Period:</span>
+        <div class="flex flex-wrap gap-1.5" id="period-group">
+            <button data-period="1h"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">1H</button>
+            <button data-period="6h"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">6H</button>
+            <button data-period="24h" class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white active">24H</button>
+            <button data-period="7d"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">7D</button>
+            <button data-period="30d" class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">30D</button>
+        </div>
+        <span class="w-full sm:w-auto sm:ml-auto text-xs text-slate-500" id="last-refresh">—</span>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Total Pelanggaran</div>
+            <div class="text-3xl font-bold text-white mt-1" id="kpi-total">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Parkir Liar</div>
+            <div class="text-3xl font-bold text-red-300 mt-1" id="kpi-illegal_parking">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Jalur Busway</div>
+            <div class="text-3xl font-bold text-orange-300 mt-1" id="kpi-busway_occupancy">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Jalur Sepeda</div>
+            <div class="text-3xl font-bold text-cyan-300 mt-1" id="kpi-bicycle_lane_occupancy">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Ngetem</div>
+            <div class="text-3xl font-bold text-yellow-300 mt-1" id="kpi-illegal_pickup_dropoff">0</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <!-- Live Camera Feed with Zone Overlay -->
+        <div class="glass-panel p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-video text-red-400"></i> Live Monitoring
+                    <span class="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse ml-1"></span>
+                </h3>
+                <select id="live-cam-select" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto"></select>
+            </div>
+            <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-black" style="min-height:280px">
+                <img id="live-feed" class="w-full" style="display:none" />
+                <div id="live-placeholder" class="flex items-center justify-center h-[280px] text-slate-500 text-sm">
+                    <i class="fas fa-video-slash mr-2"></i> Select camera to start monitoring
+                </div>
+            </div>
+            <div class="mt-2 text-xs text-slate-500 flex items-center gap-3">
+                <span><i class="fas fa-shield-halved text-emerald-400 mr-1"></i> Enforcement zones active on this camera</span>
+                <span id="live-zone-count" class="text-emerald-300 font-semibold">0 zones</span>
+            </div>
+        </div>
+
+        <!-- Active Zones Overview -->
+        <div class="glass-panel p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-draw-polygon text-sky-400"></i> Active Enforcement Zones
+                </h3>
+                <a href="/zones" class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                    <i class="fas fa-plus"></i> Add Zone
+                </a>
+            </div>
+            <div id="zones-overview" class="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                <div class="text-slate-500 text-xs text-center py-8">Loading zones...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <!-- Spatial heatmap -->
+        <div class="glass-panel p-4">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-fire text-red-400"></i> Spatial Violation Heatmap
+                </h3>
+                <span class="text-[10px] text-slate-500" id="heatmap-count">0 points</span>
+            </div>
+            <div id="heatmap"></div>
+        </div>
+
+        <!-- Temporal chart (by hour) -->
+        <div class="glass-panel p-4">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-2">
+                <i class="fas fa-chart-column text-sky-400"></i> Violations by Hour of Day
+            </h3>
+            <div style="height:260px"><canvas id="chart-hour"></canvas></div>
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mt-4 mb-2">
+                <i class="fas fa-calendar-week text-emerald-400"></i> Violations by Day of Week
+            </h3>
+            <div style="height:150px"><canvas id="chart-dow"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Recommendations simulator -->
+    <div class="glass-panel p-4">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <i class="fas fa-bullseye text-purple-400"></i> Enforcement Placement Recommendations
+            </h3>
+            <span class="text-[10px] text-slate-500">Based on violation density, type diversity & recency</span>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="text-slate-400 text-xs uppercase">
+                <tr>
+                    <th class="text-left py-2 px-2">Location</th>
+                    <th class="text-right py-2 px-2">Violations/day</th>
+                    <th class="text-right py-2 px-2">Types</th>
+                    <th class="text-right py-2 px-2">Score</th>
+                    <th class="text-left py-2 px-2">Recommendation</th>
+                </tr>
+            </thead>
+            <tbody id="recs-body" class="text-slate-300">
+                <tr><td colspan="5" class="text-center text-slate-500 py-6">Loading…</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- Laporan Media Sosial (Twitter/X) -->
+    <div class="glass-panel p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <i class="fab fa-x-twitter text-slate-300"></i> Laporan Media Sosial
+                <span class="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">Live</span>
+            </h3>
+            <button onclick="refreshTweets()" class="text-xs text-slate-500 hover:text-sky-400"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+        </div>
+        <div id="twitter-feed" class="space-y-2.5 max-h-[450px] overflow-y-auto pr-1">
+            <div class="text-center text-slate-500 text-xs py-8">
+                <i class="fab fa-x-twitter text-2xl text-slate-700 mb-2 block"></i>
+                Memuat laporan dari Twitter/X...
+            </div>
+        </div>
+        <p class="text-[10px] text-slate-600 mt-2" id="news-subtitle">Menampilkan berita terbaru tentang lalu lintas & kemacetan.</p>
+    </div>
+
+    <!-- Recent violations feed -->
+    <div class="glass-panel p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <i class="fas fa-list text-amber-400"></i> Pelanggaran Terbaru
+            </h3>
+            <div class="flex flex-wrap gap-2">
+                <select id="filter-type" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto">
+                    <option value="">All types</option>
+                    <option value="illegal_parking">Illegal Parking</option>
+                    <option value="busway_occupancy">Busway</option>
+                    <option value="bicycle_lane_occupancy">Bicycle Lane</option>
+                    <option value="illegal_pickup_dropoff">Pickup/Drop-off</option>
+                    <option value="wrong_way">Lawan Arah</option>
+                </select>
+                <select id="filter-status" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto">
+                    <option value="">All statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="dispatched">Dispatched</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+                <input id="filter-plate" placeholder="Plate contains…" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" />
+                <input id="filter-date-start" type="date" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Dari tanggal" />
+                <input id="filter-date-end" type="date" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Sampai tanggal" />
+                <select id="filter-limit" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Jumlah per halaman">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="250">250</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                </select>
+                <button id="apply-filter" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white w-full sm:w-auto">Apply</button>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="text-slate-400 text-xs uppercase">
+                <tr>
+                    <th class="text-left py-2 px-2">Time</th>
+                    <th class="text-left py-2 px-2">Location</th>
+                    <th class="text-left py-2 px-2">Type</th>
+                    <th class="text-left py-2 px-2">Plate</th>
+                    <th class="text-left py-2 px-2">Vehicle</th>
+                    <th class="text-right py-2 px-2">Duration</th>
+                    <th class="text-left py-2 px-2">Status</th>
+                    <th class="text-left py-2 px-2">Action</th>
+                </tr>
+            </thead>
+            <tbody id="violations-body" class="text-slate-300 text-[13px]"></tbody>
+        </table>
+        </div>
+        <!-- Pagination -->
+        <div class="flex items-center justify-between mt-3 px-2">
+            <div class="text-xs text-slate-500" id="violations-info">—</div>
+            <div class="flex gap-1">
+                <button id="page-prev" class="px-3 py-1 rounded-md text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-30" disabled>← Prev</button>
+                <button id="page-next" class="px-3 py-1 rounded-md text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-30" disabled>Next →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Evidence modal -->
+<div id="evidence-modal" class="fixed inset-0 bg-black/85 hidden items-center justify-center z-[9999] backdrop-blur-md p-4">
+    <div class="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 bg-slate-800/50 border-b border-slate-700/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
+                    <i class="fas fa-shield-halved text-red-400 text-lg"></i>
+                </div>
+                <div>
+                    <div id="em-title" class="text-white font-bold text-base">E-TLE Report</div>
+                    <div id="em-subtitle" class="text-slate-400 text-xs mt-0.5">Violation Evidence</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="em-status-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">PENDING</span>
+                <button onclick="document.getElementById('evidence-modal').classList.remove('flex'); document.getElementById('evidence-modal').classList.add('hidden');" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-all">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Body -->
+        <div class="p-5">
+            <!-- Evidence Image -->
+            <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-black">
+                <img id="em-img" class="w-full max-h-[55vh] object-contain" />
+                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm">
+                    <span id="em-violation-badge" class="text-[11px] font-bold text-red-300 uppercase tracking-wide">ILLEGAL PARKING</span>
+                </div>
+                <div class="absolute bottom-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm">
+                    <span id="em-time-badge" class="text-[11px] font-mono text-cyan-300"></span>
+                </div>
+            </div>
+
+            <!-- Info Grid -->
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Plat Nomor</div>
+                    <div id="em-plate" class="text-white font-bold font-mono text-sm tracking-wider">—</div>
+                </div>
+                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Kendaraan</div>
+                    <div id="em-vehicle" class="text-white font-semibold text-sm capitalize">—</div>
+                </div>
+                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Lokasi</div>
+                    <div id="em-location" class="text-white text-xs font-mono">—</div>
+                </div>
+                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
+                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Durasi</div>
+                    <div id="em-duration" class="text-white font-bold text-sm">—</div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-5 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button id="em-dispatch" class="group px-4 py-2.5 bg-sky-600/90 hover:bg-sky-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-900/20">
+                    <i class="fas fa-truck group-hover:scale-110 transition-transform"></i>
+                    <span>Kirim Petugas</span>
+                </button>
+                <button id="em-resolve" class="group px-4 py-2.5 bg-emerald-600/90 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
+                    <i class="fas fa-check group-hover:scale-110 transition-transform"></i>
+                    <span>Selesai</span>
+                </button>
+                <button id="em-emergency" class="group px-4 py-2.5 bg-orange-600/90 hover:bg-orange-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-900/20">
+                    <i class="fas fa-triangle-exclamation group-hover:scale-110 transition-transform"></i>
+                    <span>Darurat</span>
+                </button>
+                <button id="em-reject" class="group px-4 py-2.5 bg-slate-700/90 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-times group-hover:scale-110 transition-transform"></i>
+                    <span>Tolak</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    let currentPeriod = '24h';
+    let heatmap = null;
+    let heatLayer = null;
+    let markersLayer = null;
+    let chartHour = null;
+    let chartDow = null;
+
+    // Live feed
+    let liveCamId = null;
+    async function loadCameras(){
+        const r = await fetch('/api/sources');
+        const cams = await r.json();
+        const sel = document.getElementById('live-cam-select');
+        sel.innerHTML = '<option value="">— Select —</option>' + cams.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        sel.addEventListener('change', e => startLiveFeed(e.target.value));
+        // Auto-select first active
+        if (cams.length) { sel.value = cams.find(c=>c.active)?.id || cams[0].id; startLiveFeed(sel.value); }
+    }
+    function startLiveFeed(camId){
+        liveCamId = camId;
+        const img = document.getElementById('live-feed');
+        const ph = document.getElementById('live-placeholder');
+        if (!camId) { img.style.display='none'; ph.style.display='flex'; return; }
+        // Switch source
+        fetch('/api/switch_source', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:camId})});
+        img.src = '/video_feed/' + camId + '?t=' + Date.now();
+        img.style.display = 'block';
+        ph.style.display = 'none';
+        loadZonesOverview();
+    }
+
+    // Zones overview
+    async function loadZonesOverview(){
+        const r = await fetch('/api/zones');
+        const d = await r.json();
+        const zones = (d.zones || []).filter(z => z.active);
+        const container = document.getElementById('zones-overview');
+        const liveCount = document.getElementById('live-zone-count');
+        
+        // Count zones for current camera
+        const camZones = liveCamId ? zones.filter(z => z.camera_id === liveCamId) : [];
+        liveCount.textContent = camZones.length + ' zone' + (camZones.length !== 1 ? 's' : '');
+
+        if (zones.length === 0){
+            container.innerHTML = `<div class="text-center py-8">
+                <i class="fas fa-draw-polygon text-3xl text-slate-700 mb-3"></i>
+                <div class="text-slate-500 text-sm">No enforcement zones defined yet</div>
+                <a href="/zones" class="text-sky-400 text-xs hover:underline mt-2 inline-block">Create your first zone →</a>
+            </div>`;
+            return;
+        }
+        const colors = { no_parking:'border-l-red-500', busway:'border-l-orange-500', bicycle:'border-l-cyan-500', bus_stop:'border-l-emerald-500' };
+        const icons = { no_parking:'fa-parking', busway:'fa-bus', bicycle:'fa-bicycle', bus_stop:'fa-bus-simple' };
+        const labels = { no_parking:'No Parking', busway:'Busway Lane', bicycle:'Bicycle Lane', bus_stop:'Bus Stop' };
+        container.innerHTML = zones.map(z => {
+            const isCurrentCam = z.camera_id === liveCamId;
+            return `<div class="mini-card border-l-4 ${colors[z.zone_type]||'border-l-slate-600'} ${isCurrentCam ? 'ring-1 ring-sky-500/30' : ''}">
+                <div class="flex items-center gap-2">
+                    <i class="fas ${icons[z.zone_type]||'fa-map-pin'} text-xs ${isCurrentCam ? 'text-sky-400' : 'text-slate-500'}"></i>
+                    <span class="text-sm text-white font-medium">${z.name || labels[z.zone_type] || 'Zone #' + z.id}</span>
+                    ${isCurrentCam ? '<span class="ml-auto text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">LIVE</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-3">
+                    <span><i class="fas fa-tag mr-1"></i>${labels[z.zone_type] || z.zone_type}</span>
+                    <span><i class="fas fa-vector-square mr-1"></i>${(z.geometry||[]).length} pts</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    loadCameras();
+
+    // Social media / news feed — search for traffic reports
+    async function refreshTweets() {
+        const feed = document.getElementById('twitter-feed');
+        try {
+            const r = await fetch('/api/twitter/search');
+            const d = await r.json();
+            // Update subtitle with actual query used
+            const subtitle = document.getElementById('news-subtitle');
+            if (subtitle && d.query) {
+                subtitle.textContent = 'Menampilkan berita terbaru tentang: ' + d.query;
+            }
+            if (d.status !== 'success' || !d.tweets || !d.tweets.length) {
+                feed.innerHTML = `<div class="text-center text-slate-500 text-xs py-6">
+                    <i class="fas fa-newspaper text-xl text-slate-700 mb-2 block"></i>
+                    ${d.message || 'Tidak ada laporan ditemukan.'}
+                </div>`;
+                return;
+            }
+            const isNews = d.source === 'google_news';
+            feed.innerHTML = d.tweets.map(t => {
+                const dt = t.created_at ? new Date(t.created_at) : null;
+                const timeStr = dt ? dt.toLocaleString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) : '';
+                const likes = t.metrics?.like_count || 0;
+                const retweets = t.metrics?.retweet_count || 0;
+                const icon = isNews ? 'fas fa-newspaper' : 'fab fa-x-twitter';
+                const linkHtml = t.link ? `<a href="${t.link}" target="_blank" class="text-sky-400 hover:text-sky-300 text-[10px] mt-1 inline-block"><i class="fas fa-external-link-alt mr-1"></i>Baca selengkapnya</a>` : '';
+                return `<div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800/50 hover:border-slate-700/50 transition">
+                    <div class="flex items-start gap-2.5">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0">
+                            ${t.author_avatar ? `<img src="${t.author_avatar}" class="w-8 h-8 rounded-full" onerror="this.style.display='none'">` : `<i class="${icon} text-slate-500 text-sm"></i>`}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-semibold text-white truncate">${t.author_name || 'Sumber'}</span>
+                                <span class="text-[10px] text-slate-600 ml-auto flex-shrink-0">${timeStr}</span>
+                            </div>
+                            <p class="text-xs text-slate-300 mt-1 leading-relaxed">${t.text || ''}</p>
+                            ${linkHtml}
+                            ${!isNews && (likes || retweets) ? `<div class="flex items-center gap-4 mt-2 text-[10px] text-slate-500">
+                                <span><i class="far fa-heart mr-1"></i>${likes}</span>
+                                <span><i class="fas fa-retweet mr-1"></i>${retweets}</span>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            feed.innerHTML = `<div class="text-center text-slate-500 text-xs py-6">Gagal memuat: ${e.message}</div>`;
+        }
+    }
+    refreshTweets();
+    setInterval(refreshTweets, 120000); // Refresh every 2 min
+
+    function chipClass(t){ return 'v-chip v-' + (t||'default'); }
+    function prettyType(t){
+        const m = { illegal_parking: 'Parkir Liar', busway_occupancy: 'Jalur Busway', bicycle_lane_occupancy: 'Jalur Sepeda', illegal_pickup_dropoff: 'Ngetem', wrong_way: 'Lawan Arah' };
+        return m[t] || (t||'Unknown');
+    }
+    function fmtTime(ts){
+        try {
+            const d = new Date((ts||0)*1000);
+            return d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        } catch(e){ return '-'; }
+    }
+
+    function formatDuration(s){
+        s = Math.round(s||0);
+        if (s < 60) return s + ' dtk';
+        if (s < 3600) return Math.floor(s/60) + ' mnt ' + (s%60) + ' dtk';
+        return Math.floor(s/3600) + ' jam ' + Math.floor((s%3600)/60) + ' mnt';
+    }
+    function statusClass(st){
+        const m = { pending:'text-amber-300', dispatched:'text-sky-300', resolved:'text-emerald-300', rejected:'text-slate-400', emergency:'text-orange-300' };
+        return m[st] || 'text-slate-400';
+    }
+    function statusIcon(st){
+        const m = { pending:'<i class="fas fa-clock"></i>', dispatched:'<i class="fas fa-truck"></i>', resolved:'<i class="fas fa-check-circle"></i>', rejected:'<i class="fas fa-times-circle"></i>', emergency:'<i class="fas fa-triangle-exclamation"></i>' };
+        return m[st] || '<i class="fas fa-circle"></i>';
+    }
+    function statusLabel(st){
+        const m = { pending:'Menunggu', dispatched:'Dikirim', resolved:'Selesai', rejected:'Ditolak', emergency:'Darurat' };
+        return m[st] || st || '-';
+    }
+
+    function setActivePeriod(p){
+        currentPeriod = p;
+        document.querySelectorAll('#period-group .period-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.period === p);
+            if (b.dataset.period === p) {
+                b.classList.add('bg-sky-600','text-white');
+                b.classList.remove('text-slate-300');
+            } else {
+                b.classList.remove('bg-sky-600','text-white');
+                b.classList.add('text-slate-300');
+            }
+        });
+    }
+
+    async function loadSummary(){
+        const r = await fetch(`/api/violations/summary?period=${encodeURIComponent(currentPeriod)}`);
+        const d = await r.json();
+        if (d.status !== 'success') return;
+        const s = d.summary || {};
+        document.getElementById('kpi-total').textContent = s.total || 0;
+        const byType = s.by_type || {};
+        ['illegal_parking','busway_occupancy','bicycle_lane_occupancy','illegal_pickup_dropoff'].forEach(k => {
+            const el = document.getElementById('kpi-' + k);
+            if (el) el.textContent = byType[k] || 0;
+        });
+        renderHourChart(s.by_hour || []);
+        renderDowChart(s.by_day_of_week || []);
+    }
+
+    function renderHourChart(data){
+        const ctx = document.getElementById('chart-hour').getContext('2d');
+        const labels = Array.from({length:24}, (_,i)=> String(i).padStart(2,'0')+':00');
+        if (chartHour) chartHour.destroy();
+        chartHour = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label:'Violations', data:data, backgroundColor:'rgba(239,68,68,0.55)', borderColor:'rgba(239,68,68,0.9)', borderWidth:1 }]},
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}} }
+        });
+    }
+
+    function renderDowChart(data){
+        const ctx = document.getElementById('chart-dow').getContext('2d');
+        const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        if (chartDow) chartDow.destroy();
+        chartDow = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label:'Violations', data:data, backgroundColor:'rgba(16,185,129,0.5)', borderColor:'rgba(16,185,129,0.9)', borderWidth:1 }]},
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}} }
+        });
+    }
+
+    function ensureMap(){
+        if (heatmap) return;
+        heatmap = L.map('heatmap', { zoomControl:true }).setView([-6.2, 106.816], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap © CARTO' }).addTo(heatmap);
+        markersLayer = L.layerGroup().addTo(heatmap);
+    }
+
+    async function loadHeatmap(){
+        ensureMap();
+        const r = await fetch(`/api/violations/heatmap?period=${encodeURIComponent(currentPeriod)}`);
+        const d = await r.json();
+        if (d.status !== 'success') return;
+        const pts = d.points || [];
+        document.getElementById('heatmap-count').textContent = pts.length + ' points';
+        if (heatLayer) { heatmap.removeLayer(heatLayer); heatLayer = null; }
+        markersLayer.clearLayers();
+        if (pts.length === 0) return;
+        const heatData = pts.map(p => [p.lat, p.lng, Math.min(1.0, (p.count||0)/25.0)]);
+        heatLayer = L.heatLayer(heatData, { radius: 30, blur: 22, maxZoom: 17,
+            gradient: {0.2:'#06b6d4', 0.4:'#f59e0b', 0.7:'#ef4444', 1:'#b91c1c'}
+        }).addTo(heatmap);
+        pts.forEach(p => {
+            const parts = Object.entries(p.by_type || {}).map(([k,v]) => `<span class="${chipClass(k)}">${prettyType(k)}: ${v}</span>`).join('<br>');
+            const html = `<div style="background:#0f172a;border-radius:10px;padding:12px;min-width:180px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                <div style="font-weight:700;color:#f1f5f9;font-size:13px;">${p.camera_name||p.camera_id}</div>
+                <div style="color:#94a3b8;font-size:11px;margin-top:4px;">Total: ${p.count}</div>
+                <div style="margin-top:6px">${parts}</div>
+            </div>`;
+            L.circleMarker([p.lat, p.lng], { radius: 6, color:'#ef4444', fillColor:'#ef4444', fillOpacity:0.8 })
+                .bindPopup(html).addTo(markersLayer);
+        });
+        try {
+            const bounds = L.latLngBounds(pts.map(p => [p.lat, p.lng]));
+            heatmap.fitBounds(bounds.pad(0.2));
+        } catch(e){}
+    }
+
+    async function loadRecommendations(){
+        const r = await fetch(`/api/violations/recommendations?top_n=10`);
+        const d = await r.json();
+        if (d.status !== 'success') return;
+        const rows = d.recommendations || [];
+        const body = document.getElementById('recs-body');
+        if (rows.length === 0) {
+            body.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-6">No violations recorded yet. Define zones first in <a class="text-sky-400 hover:underline" href="/zones">Zone Editor</a>.</td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map(r => {
+            const badge = r.recommendation === 'install_etle_camera'
+                ? '<span class="v-chip v-illegal_parking">Install E-TLE Camera</span>'
+                : r.recommendation === 'officer_patrol'
+                ? '<span class="v-chip v-busway_occupancy">Officer Patrol</span>'
+                : '<span class="v-chip v-default">Monitor</span>';
+            const types = (r.recommended_target_types || []).map(t => `<span class="${chipClass(t)}">${prettyType(t)}</span>`).join(' ');
+            return `<tr class="border-t border-slate-800/60 hover:bg-slate-800/40">
+                <td class="py-2 px-2">${r.camera_name || r.camera_id}</td>
+                <td class="py-2 px-2 text-right">${r.violations_per_day}</td>
+                <td class="py-2 px-2 text-right">${types || '-'}</td>
+                <td class="py-2 px-2 text-right font-semibold text-white">${r.score}</td>
+                <td class="py-2 px-2">${badge}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    let currentPage = 0;
+    let totalViolations = 0;
+
+    async function loadViolations(page){
+        if (page === undefined) page = 0;
+        currentPage = page;
+
+        const t = document.getElementById('filter-type').value;
+        const s = document.getElementById('filter-status').value;
+        const p = document.getElementById('filter-plate').value;
+        const dateStart = document.getElementById('filter-date-start').value;
+        const dateEnd = document.getElementById('filter-date-end').value;
+        const limit = parseInt(document.getElementById('filter-limit').value) || 100;
+        const offset = page * limit;
+
+        const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
+        if (t) params.set('violation_type', t);
+        if (s) params.set('status', s);
+        if (p) params.set('plate', p);
+        if (dateStart) params.set('start', new Date(dateStart).getTime() / 1000);
+        if (dateEnd) params.set('end', new Date(dateEnd + 'T23:59:59').getTime() / 1000);
+
+        const r = await fetch('/api/violations?' + params.toString());
+        const d = await r.json();
+        const body = document.getElementById('violations-body');
+        if (d.status !== 'success' || !d.violations || d.violations.length === 0) {
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-6">No violations recorded for this period.</td></tr>';
+            document.getElementById('violations-info').textContent = 'No data';
+            document.getElementById('page-prev').disabled = true;
+            document.getElementById('page-next').disabled = true;
+            return;
+        }
+        totalViolations = d.total || d.violations.length;
+        body.innerHTML = d.violations.map(v => `
+            <tr class="border-t border-slate-800/60 hover:bg-slate-800/40">
+                <td class="py-2 px-2 whitespace-nowrap text-xs">${fmtTime(v.timestamp)}</td>
+                <td class="py-2 px-2 text-xs">${v.camera_name || v.camera_id}</td>
+                <td class="py-2 px-2"><span class="${chipClass(v.violation_type)}">${prettyType(v.violation_type)}</span></td>
+                <td class="py-2 px-2 font-mono text-slate-200 text-xs tracking-wider">${v.plate_text || '<span class="text-slate-600">—</span>'}</td>
+                <td class="py-2 px-2 text-xs capitalize">${v.vehicle_class || '—'}</td>
+                <td class="py-2 px-2 text-right tabular-nums text-xs">${formatDuration(v.duration_s)}</td>
+                <td class="py-2 px-2"><span class="inline-flex items-center gap-1 text-xs ${statusClass(v.status)}">${statusIcon(v.status)} ${statusLabel(v.status)}</span></td>
+                <td class="py-2 px-2">
+                    <button data-id="${v.id}" class="btn-view px-2.5 py-1 rounded-md bg-sky-600/20 hover:bg-sky-600/40 text-xs text-sky-300 border border-sky-600/30">
+                        <i class="fas fa-eye mr-1"></i>Detail
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        document.querySelectorAll('.btn-view').forEach(btn => {
+            btn.addEventListener('click', () => openEvidence(btn.dataset.id));
+        });
+
+        // Pagination info
+        const showing = d.violations.length;
+        const from = offset + 1;
+        const to = offset + showing;
+        document.getElementById('violations-info').textContent = `Showing ${from}–${to} of ${totalViolations} violations`;
+        document.getElementById('page-prev').disabled = (page <= 0);
+        document.getElementById('page-next').disabled = (showing < limit);
+
+        document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    }
+
+    async function openEvidence(id){
+        const r = await fetch('/api/violations/' + id);
+        const d = await r.json();
+        if (d.status !== 'success') return;
+        const v = d.violation;
+
+        // Title & subtitle
+        document.getElementById('em-title').textContent = prettyType(v.violation_type);
+        document.getElementById('em-subtitle').textContent = (v.camera_name || v.camera_id) + ' • ' + new Date((v.timestamp||0)*1000).toLocaleString('id-ID');
+
+        // Violation type badge on image
+        document.getElementById('em-violation-badge').textContent = prettyType(v.violation_type);
+
+        // Timestamp badge on image
+        const ts = v.timestamp ? new Date(v.timestamp*1000) : null;
+        document.getElementById('em-time-badge').textContent = ts ? ts.toLocaleString('id-ID', {dateStyle:'short', timeStyle:'medium'}) : '';
+
+        // Status badge
+        const statusBadge = document.getElementById('em-status-badge');
+        const statusColors = {
+            pending: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+            dispatched: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+            resolved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+            rejected: 'bg-red-500/15 text-red-300 border-red-500/30',
+        };
+        statusBadge.className = `px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusColors[v.status] || statusColors.pending}`;
+        statusBadge.textContent = (v.status || 'pending').toUpperCase();
+
+        // Evidence image
+        document.getElementById('em-img').src = v.evidence_path ? ('/evidence/' + v.evidence_path) : '';
+
+        // Info cards
+        document.getElementById('em-plate').textContent = v.plate_text || '—';
+        document.getElementById('em-vehicle').textContent = v.vehicle_class || '—';
+        document.getElementById('em-location').textContent = (v.lat && v.lng) ? `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}` : (v.camera_name || '-');
+
+        // Duration formatting
+        const dur = Math.round(v.duration_s || 0);
+        const durText = dur >= 60 ? `${Math.floor(dur/60)}m ${dur%60}s` : `${dur}s`;
+        document.getElementById('em-duration').textContent = durText;
+
+        // Show modal
+        const modal = document.getElementById('evidence-modal');
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+
+        // Action buttons
+        document.getElementById('em-dispatch').onclick = () => patchStatus(id, 'dispatched', 'DISHUB Unit A');
+        document.getElementById('em-resolve').onclick  = () => patchStatus(id, 'resolved');
+        document.getElementById('em-emergency').onclick = () => patchStatus(id, 'emergency');
+        document.getElementById('em-reject').onclick   = () => patchStatus(id, 'rejected');
+    }
+
+    async function patchStatus(id, status, dispatched_unit){
+        const body = { status };
+        if (dispatched_unit) body.dispatched_unit = dispatched_unit;
+        await fetch('/api/violations/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        document.getElementById('evidence-modal').classList.remove('flex');
+        document.getElementById('evidence-modal').classList.add('hidden');
+        loadViolations(currentPage);
+    }
+
+    async function refreshAll(){
+        try { await Promise.all([loadSummary(), loadHeatmap(), loadRecommendations(), loadViolations(currentPage), loadZonesOverview()]); }
+        catch(e){ console.warn(e); }
+    }
+
+    document.querySelectorAll('#period-group .period-btn').forEach(btn => {
+        btn.addEventListener('click', () => { setActivePeriod(btn.dataset.period); refreshAll(); });
+    });
+    document.getElementById('apply-filter').addEventListener('click', () => loadViolations(0));
+    document.getElementById('page-prev').addEventListener('click', () => { if (currentPage > 0) loadViolations(currentPage - 1); });
+    document.getElementById('page-next').addEventListener('click', () => loadViolations(currentPage + 1));
+    document.getElementById('btn-export-violations').addEventListener('click', () => {
+        const params = new URLSearchParams();
+        const t = document.getElementById('filter-type').value;
+        if (t) params.set('violation_type', t);
+        window.open('/api/violations/export_csv?' + params.toString(), '_blank');
+    });
+    document.getElementById('btn-clear-violations').addEventListener('click', async () => {
+        if (!confirm('Hapus semua data pelanggaran? Tindakan ini tidak bisa dibatalkan.')) return;
+        const r = await fetch('/api/violations/clear', { method: 'POST' });
+        const d = await r.json();
+        if (d.status === 'success') { refreshAll(); }
+    });
+
+    setActivePeriod('24h');
+    refreshAll();
+    setInterval(refreshAll, 15000);
+})();
+</script>
+{% endblock %}

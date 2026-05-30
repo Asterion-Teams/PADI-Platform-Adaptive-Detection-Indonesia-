@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+{% block title %}PADI - Documentation{% endblock %}
+{% block header_kicker %}Docs{% endblock %}
+{% block header_title %}System Documentation{% endblock %}
+{% block style_extra %}
+<style>
+    .content-card { background: rgba(30, 41, 59, 0.35); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 0.9rem; }
+    h1, h2, h3, h4 { color: #f8fafc; letter-spacing: -0.025em; }
+    .prose-h2 { font-size: 1.5rem; font-weight: 800; margin-top: 2.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .prose-p { margin-bottom: 1.25rem; line-height: 1.75; color: #94a3b8; }
+    .feature-card { background: rgba(15,23,42,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 0.75rem; padding: 1.25rem; }
+    .stat-box { background: rgba(30,41,59,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 0.75rem; padding: 1rem; text-align: center; }
+    .mermaid { min-width: 600px; font-size: 14px !important; }
+    .mermaid svg { min-height: 300px; width: 100% !important; max-width: 900px; }
+</style>
+{% endblock %}
+{% block sidebar_nav %}
+    <div class="nav-section">PADI</div>
+    <a href="#overview" class="doc-link active">Overview</a>
+    <a href="#features" class="doc-link">Fitur Utama</a>
+    <a href="#architecture" class="doc-link">Arsitektur</a>
+    <div class="nav-section">Enforcement</div>
+    <a href="#violations" class="doc-link">Deteksi Pelanggaran</a>
+    <a href="#anpr" class="doc-link">ANPR (Plat Nomor)</a>
+    <a href="#zones" class="doc-link">Zone Management</a>
+    <div class="nav-section">Operations</div>
+    <a href="#cameras" class="doc-link">Multi-Kamera</a>
+    <a href="#gpu" class="doc-link">GPU & Performance</a>
+    <a href="#settings" class="doc-link">Pengaturan</a>
+    <a href="#crm" class="doc-link">CRM Social Media</a>
+    <div class="nav-section">Developers</div>
+    <a href="#api" class="doc-link">API Reference</a>
+{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto pb-20 p-4 md:p-6">
+
+    <!-- Overview -->
+    <section id="overview" class="mb-12">
+        <h1 class="text-3xl font-bold text-white mb-4">PADI</h1>
+        <p class="text-lg text-slate-300 mb-2">Platform Adaptive Deteksi Indonesia</p>
+        <p class="prose-p">
+            Sistem monitoring lalu lintas cerdas berbasis AI yang mengubah CCTV konvensional menjadi platform enforcement otomatis. 
+            Dikembangkan untuk <strong class="text-white">AI Open Innovation Challenge 2026</strong> — DISHUB DKI Jakarta.
+        </p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+            <div class="stat-box">
+                <div class="text-2xl font-bold text-red-400">5</div>
+                <div class="text-[10px] text-slate-500 uppercase mt-1">Jenis Pelanggaran</div>
+            </div>
+            <div class="stat-box">
+                <div class="text-2xl font-bold text-purple-400">YOLO</div>
+                <div class="text-[10px] text-slate-500 uppercase mt-1">AI Detection</div>
+            </div>
+            <div class="stat-box">
+                <div class="text-2xl font-bold text-sky-400">PaddleOCR</div>
+                <div class="text-[10px] text-slate-500 uppercase mt-1">Plate Reading</div>
+            </div>
+            <div class="stat-box">
+                <div class="text-2xl font-bold text-emerald-400">Real-time</div>
+                <div class="text-[10px] text-slate-500 uppercase mt-1">24/7 Monitoring</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="mb-12">
+        <h2 class="prose-h2">Fitur Utama</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="feature-card border-l-4 border-red-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-shield-halved text-red-400 mr-2"></i>E-TLE Otomatis</h4>
+                <p class="text-sm text-slate-400">Deteksi parkir liar, busway, jalur sepeda, lawan arah — otomatis dengan bukti foto resolusi tinggi.</p>
+            </div>
+            <div class="feature-card border-l-4 border-amber-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-id-card text-amber-400 mr-2"></i>ANPR</h4>
+                <p class="text-sm text-slate-400">Pembacaan plat nomor otomatis menggunakan PaddleOCR dengan preprocessing adaptive untuk semua jenis plat Indonesia.</p>
+            </div>
+            <div class="feature-card border-l-4 border-sky-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-chart-line text-sky-400 mr-2"></i>Traffic Analytics</h4>
+                <p class="text-sm text-slate-400">Counting kendaraan real-time, history chart, dan data volume lalu lintas per kamera.</p>
+            </div>
+            <div class="feature-card border-l-4 border-emerald-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-newspaper text-emerald-400 mr-2"></i>Media Monitoring</h4>
+                <p class="text-sm text-slate-400">Pantau berita lalu lintas real-time dari Google News dengan keyword yang bisa dikonfigurasi.</p>
+            </div>
+            <div class="feature-card border-l-4 border-purple-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-file-pdf text-purple-400 mr-2"></i>Executive Summary</h4>
+                <p class="text-sm text-slate-400">Laporan PDF otomatis dengan breakdown pelanggaran, hotspot, dan rekomendasi enforcement.</p>
+            </div>
+            <div class="feature-card border-l-4 border-cyan-500">
+                <h4 class="font-bold text-white mb-2"><i class="fas fa-draw-polygon text-cyan-400 mr-2"></i>Zone Editor</h4>
+                <p class="text-sm text-slate-400">Gambar zona pelanggaran langsung di atas frame kamera. Aktif tanpa restart.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture" class="mb-12">
+        <h2 class="prose-h2">Arsitektur Sistem</h2>
+        <p class="prose-p">Pipeline: <strong class="text-white">Capture → Detection → Enforcement → Evidence → Report</strong></p>
+        <div class="content-card p-6 overflow-x-auto flex justify-center bg-[#0f172a]">
+            <div class="mermaid">
+                %%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#1e293b', 'edgeLabelBackground':'#0f172a', 'fontFamily': 'Inter', 'fontSize': '13px'}}}%%
+                graph TD
+                    A[fa:fa-video CCTV Stream] -->|Frame| B(Camera Agent)
+                    B -->|Batch| C{GPU Batch Inference<br/>YOLO}
+                    C -->|Detections| D[Vehicle Tracker]
+                    D -->|Tracks| E{Enforcement Engine}
+                    E -->|Violation| F[PaddleOCR ANPR]
+                    F --> G[Evidence Capture<br/>Full Resolution]
+                    G --> H[(Database)]
+                    H --> I[Dashboard & Reports]
+
+                    style A fill:#1d4ed8,stroke:#3b82f6,color:#fff
+                    style C fill:#7e22ce,stroke:#a855f7,color:#fff
+                    style E fill:#dc2626,stroke:#ef4444,color:#fff
+                    style H fill:#059669,stroke:#10b981,color:#fff
+            </div>
+        </div>
+    </section>
+
+    <!-- Violations -->
+    <section id="violations" class="mb-12">
+        <h2 class="prose-h2">Deteksi Pelanggaran</h2>
+        <p class="prose-p">Sistem mendeteksi 5 jenis pelanggaran secara otomatis:</p>
+        <div class="space-y-3">
+            <div class="content-card p-4 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0"><i class="fas fa-parking text-red-400"></i></div>
+                <div>
+                    <h4 class="text-white font-semibold text-sm">Parkir Liar</h4>
+                    <p class="text-xs text-slate-400">Kendaraan diam >60 detik di zona larangan parkir</p>
+                </div>
+            </div>
+            <div class="content-card p-4 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0"><i class="fas fa-bus text-orange-400"></i></div>
+                <div>
+                    <h4 class="text-white font-semibold text-sm">Jalur Busway</h4>
+                    <p class="text-xs text-slate-400">Kendaraan non-bus memasuki jalur busway (bus diizinkan)</p>
+                </div>
+            </div>
+            <div class="content-card p-4 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0"><i class="fas fa-bicycle text-cyan-400"></i></div>
+                <div>
+                    <h4 class="text-white font-semibold text-sm">Jalur Sepeda</h4>
+                    <p class="text-xs text-slate-400">Kendaraan bermotor memasuki jalur sepeda</p>
+                </div>
+            </div>
+            <div class="content-card p-4 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0"><i class="fas fa-arrow-right-arrow-left text-pink-400"></i></div>
+                <div>
+                    <h4 class="text-white font-semibold text-sm">Lawan Arah</h4>
+                    <p class="text-xs text-slate-400">Kendaraan bergerak berlawanan dengan arah yang diizinkan (>150° perbedaan)</p>
+                </div>
+            </div>
+            <div class="content-card p-4 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0"><i class="fas fa-hand text-yellow-400"></i></div>
+                <div>
+                    <h4 class="text-white font-semibold text-sm">Ngetem / Berhenti Sembarangan</h4>
+                    <p class="text-xs text-slate-400">Angkutan umum berhenti di luar halte</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ANPR -->
+    <section id="anpr" class="mb-12">
+        <h2 class="prose-h2">ANPR (Automatic Number Plate Recognition)</h2>
+        <p class="prose-p">Pipeline pembacaan plat nomor:</p>
+        <ol class="space-y-2 text-sm text-slate-300 list-decimal list-inside">
+            <li><strong class="text-white">Plate Detection</strong> — YOLO model khusus mendeteksi lokasi plat di kendaraan</li>
+            <li><strong class="text-white">Crop & Upscale</strong> — Area plat di-crop dan di-upscale ke 500px (LANCZOS4)</li>
+            <li><strong class="text-white">Adaptive Preprocessing</strong> — Deteksi warna plat (hitam/kuning/merah/putih) → enhancement sesuai</li>
+            <li><strong class="text-white">PaddleOCR</strong> — PP-OCRv4 membaca teks plat</li>
+            <li><strong class="text-white">Postprocessing</strong> — Koreksi OCR error (O→0, B→8, dll) + format Indonesia</li>
+        </ol>
+        <div class="content-card p-4 mt-4">
+            <p class="text-xs text-slate-500">Mendukung semua jenis plat Indonesia: hitam (pribadi), kuning (umum), merah (pemerintah), putih (format baru 2022+)</p>
+        </div>
+    </section>
+
+    <!-- Zones -->
+    <section id="zones" class="mb-12">
+        <h2 class="prose-h2">Zone Management</h2>
+        <p class="prose-p">Operator menggambar polygon zona langsung di atas frame kamera. Setiap zona memiliki tipe dan aturan tersendiri.</p>
+        <div class="content-card p-4">
+            <table class="w-full text-sm">
+                <thead><tr class="text-slate-400 border-b border-slate-700"><th class="text-left py-2">Tipe Zona</th><th class="text-left py-2">Aturan</th><th class="text-left py-2">Threshold</th></tr></thead>
+                <tbody class="text-slate-300">
+                    <tr class="border-b border-slate-800"><td class="py-2">No Parking</td><td>Kendaraan diam (stationary)</td><td>60 detik</td></tr>
+                    <tr class="border-b border-slate-800"><td class="py-2">Busway</td><td>Non-bus melintas</td><td>2 detik</td></tr>
+                    <tr class="border-b border-slate-800"><td class="py-2">Bicycle Lane</td><td>Kendaraan bermotor melintas</td><td>2 detik</td></tr>
+                    <tr class="border-b border-slate-800"><td class="py-2">Wrong Way</td><td>Arah berlawanan >150°</td><td>4 detik + 100px movement</td></tr>
+                    <tr><td class="py-2">Bus Stop</td><td>Zona halte (referensi)</td><td>—</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Multi-Camera -->
+    <section id="cameras" class="mb-12">
+        <h2 class="prose-h2">Multi-Kamera</h2>
+        <p class="prose-p">Sistem mendukung multiple kamera CCTV secara bersamaan. Setiap kamera berjalan sebagai thread terpisah dengan enforcement engine masing-masing.</p>
+        <ul class="space-y-2 text-sm text-slate-300">
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Support HLS, RTSP, HTTP stream, dan file video lokal</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Background processing — semua kamera aktif 24/7</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Auto-reconnect dengan exponential backoff saat stream putus</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Hot-swap model AI tanpa restart server</li>
+        </ul>
+    </section>
+
+    <!-- GPU -->
+    <section id="gpu" class="mb-12">
+        <h2 class="prose-h2">GPU & Performance</h2>
+        <p class="prose-p">Optimasi performa untuk operasi 24/7:</p>
+        <ul class="space-y-2 text-sm text-slate-300">
+            <li><i class="fas fa-bolt text-amber-400 mr-2"></i><strong class="text-white">GPU Batch Inference</strong> — Semua kamera share 1 GPU, inference dalam batch</li>
+            <li><i class="fas fa-compress text-sky-400 mr-2"></i><strong class="text-white">Pre-resize</strong> — Frame di-resize ke 640px sebelum inference (hemat VRAM), koordinat di-scale balik</li>
+            <li><i class="fas fa-image text-emerald-400 mr-2"></i><strong class="text-white">Full-res Evidence</strong> — Bukti pelanggaran tetap resolusi penuh dari kamera</li>
+            <li><i class="fas fa-clock text-purple-400 mr-2"></i><strong class="text-white">Smart Sleep</strong> — Background kamera 2s/cycle, active view 30 FPS</li>
+        </ul>
+    </section>
+
+    <!-- Settings -->
+    <section id="settings" class="mb-12">
+        <h2 class="prose-h2">Pengaturan</h2>
+        <p class="prose-p">Semua pengaturan tersimpan permanen di <code class="text-sky-300">data/app_settings.json</code> dan tetap berlaku setelah restart server.</p>
+        <ul class="space-y-2 text-sm text-slate-300">
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>Confidence & IoU threshold</li>
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>Inference image size (320-1280px)</li>
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>Enforcement thresholds (parking, busway, cooldown)</li>
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>X.com search query & cookies (CRM scraper)</li>
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>Keyword pencarian berita</li>
+            <li><i class="fas fa-sliders text-slate-400 mr-2"></i>Timezone</li>
+        </ul>
+    </section>
+
+    <!-- CRM Social Media -->
+    <section id="crm" class="mb-12">
+        <h2 class="prose-h2">CRM — Social Media Monitoring</h2>
+        <p class="prose-p">Sistem memonitor mention @DishubDKI di X.com (Twitter) secara real-time menggunakan Playwright headless browser.</p>
+        
+        <div class="content-card p-4 mb-4">
+            <h4 class="text-white font-semibold text-sm mb-3">Cara Kerja</h4>
+            <ol class="space-y-2 text-sm text-slate-300 list-decimal list-inside">
+                <li><strong class="text-white">Cookie Session</strong> — Cookies X.com di-load dari <code class="text-sky-300">data/x_cookies.json</code></li>
+                <li><strong class="text-white">Playwright</strong> — Headless Chromium buka X.com search dengan session yang sudah login</li>
+                <li><strong class="text-white">Scrape</strong> — Extract tweet text, username, timestamp dari hasil search</li>
+                <li><strong class="text-white">Filter</strong> — Hanya tweet yang relevan (mention dishub/traffic keywords) yang ditampilkan</li>
+                <li><strong class="text-white">Auto-classify</strong> — Setiap mention otomatis dikategorikan (parkir liar, busway, kemacetan, dll)</li>
+                <li><strong class="text-white">Import</strong> — Operator bisa import mention ke CRM sebagai report dengan 1 klik</li>
+            </ol>
+        </div>
+
+        <div class="content-card p-4">
+            <h4 class="text-white font-semibold text-sm mb-3">FAQ</h4>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <p class="text-slate-200 font-medium">Apakah browser X.com harus terbuka terus?</p>
+                    <p class="text-slate-400">Tidak. Cookie session berlaku berbulan-bulan (expiry 2027). Browser bisa ditutup, PC bisa shutdown. Playwright menggunakan cookie secara independen.</p>
+                </div>
+                <div>
+                    <p class="text-slate-200 font-medium">Kapan cookie expired?</p>
+                    <p class="text-slate-400">Saat logout dari X.com, ganti password, atau X.com revoke session (~6 bulan). Jika expired, paste cookie baru di Settings.</p>
+                </div>
+                <div>
+                    <p class="text-slate-200 font-medium">Seberapa real-time update-nya?</p>
+                    <p class="text-slate-400">Cache 2 menit. Halaman CRM auto-refresh setiap 60 detik. Tweet baru muncul dalam maksimal 2 menit.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- API Reference -->
+    <section id="api" class="mb-12">
+        <h2 class="prose-h2">API Reference</h2>
+        <p class="prose-p">Semua endpoint menggunakan JSON. Base URL: <code class="text-sky-300">http://&lt;server&gt;:5002</code></p>
+
+        <div class="space-y-3">
+            <!-- Traffic Stats -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/stats</code>
+                </div>
+                <p class="text-xs text-slate-400">Data traffic real-time semua kamera (count, class, density, monthly aggregation).</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/history?period=24h&camera_id=xxx</code>
+                </div>
+                <p class="text-xs text-slate-400">History traffic per interval. Periods: 30m, 1h, 6h, 12h, 24h, 7d, 30d.</p>
+            </div>
+
+            <!-- Violations -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/violations?status=pending&limit=50</code>
+                </div>
+                <p class="text-xs text-slate-400">List pelanggaran. Filter: status (pending/confirmed/dismissed), camera_id, violation_type.</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/violations/executive_summary?period=24h</code>
+                </div>
+                <p class="text-xs text-slate-400">Executive summary: total, breakdown by type, hotspot, rekomendasi. Periods: 24h, 7d, 30d.</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">PATCH</span>
+                    <code class="text-sm text-white">/api/violations/&lt;id&gt;</code>
+                </div>
+                <p class="text-xs text-slate-400">Update status violation (pending → confirmed/dismissed). Body: {"status": "confirmed"}</p>
+            </div>
+
+            <!-- Zones -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/zones?camera_id=xxx</code>
+                </div>
+                <p class="text-xs text-slate-400">List zona enforcement per kamera (polygon, type, active status).</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">POST</span>
+                    <code class="text-sm text-white">/api/zones</code>
+                </div>
+                <p class="text-xs text-slate-400">Buat zona baru. Body: {camera_id, zone_type, geometry: [[x,y],...], name, notes}.</p>
+            </div>
+
+            <!-- CRM -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/crm/social_mentions</code>
+                </div>
+                <p class="text-xs text-slate-400">Scrape X.com untuk mention @DishubDKI. Menggunakan Playwright + session cookies. Cache 2 menit.</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/crm/reports?status=open&limit=100</code>
+                </div>
+                <p class="text-xs text-slate-400">List CRM reports (citizen complaints). Filter by status.</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">POST</span>
+                    <code class="text-sm text-white">/api/crm/reports</code>
+                </div>
+                <p class="text-xs text-slate-400">Submit report baru. Body: {reporter_name, description, category}. Auto-classify violation type.</p>
+            </div>
+
+            <!-- Camera -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/sources</code>
+                </div>
+                <p class="text-xs text-slate-400">List semua kamera yang terdaftar (id, name, url, lat, lng, active).</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">POST</span>
+                    <code class="text-sm text-white">/api/add_camera</code>
+                </div>
+                <p class="text-xs text-slate-400">Tambah kamera baru. Body: {name, url, lat, lng, username, password}.</p>
+            </div>
+
+            <!-- Settings -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/settings</code>
+                </div>
+                <p class="text-xs text-slate-400">Semua settings saat ini (detection, enforcement, social_media, model, GPU info).</p>
+            </div>
+
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">POST</span>
+                    <code class="text-sm text-white">/api/settings</code>
+                </div>
+                <p class="text-xs text-slate-400">Update settings. Persist ke disk. Body: {detection: {...}, enforcement: {...}, social_media: {...}}.</p>
+            </div>
+
+            <!-- OCR -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">POST</span>
+                    <code class="text-sm text-white">/api/ocr/test</code>
+                </div>
+                <p class="text-xs text-slate-400">Upload gambar → PaddleOCR baca plat nomor. Multipart form: image file.</p>
+            </div>
+
+            <!-- Stream -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/video_feed/&lt;camera_id&gt;</code>
+                </div>
+                <p class="text-xs text-slate-400">MJPEG stream live dari kamera (dengan bounding box detection overlay).</p>
+            </div>
+
+            <!-- News -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/twitter/search?q=macet+jakarta</code>
+                </div>
+                <p class="text-xs text-slate-400">Cari berita lalu lintas via Google News RSS. Query configurable dari Settings.</p>
+            </div>
+
+            <!-- Export -->
+            <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">GET</span>
+                    <code class="text-sm text-white">/api/export_csv?period=24h&camera_id=xxx</code>
+                </div>
+                <p class="text-xs text-slate-400">Export data traffic ke CSV. Periods: 30m, 1h, 6h, 12h, 24h, 7d, 30d.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <div class="text-center text-xs text-slate-600 mt-16 pt-8 border-t border-slate-800">
+        <p>PADI — Platform Adaptive Deteksi Indonesia</p>
+        <p class="mt-1">© 2026 Team Asterion · AI Open Innovation Challenge · DISHUB DKI Jakarta</p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+{% endblock %}

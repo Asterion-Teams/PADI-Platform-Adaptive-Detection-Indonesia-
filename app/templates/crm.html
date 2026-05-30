@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}PADI - Citizen Reports (CRM){% endblock %}
+{% block header_kicker %}Enforcement{% endblock %}
+{% block header_title %}Citizen Reports & CRM Integration{% endblock %}
+{% block header_actions %}
+    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+        <i class="fas fa-chart-line text-sky-300"></i>
+        <span>Enforcement Dashboard</span>
+    </a>
+{% endblock %}
+{% block style_extra %}
+<style>
+    .pill { display:inline-flex; align-items:center; gap:0.3rem; padding:2px 8px; border-radius:9999px; font-size:0.72rem; font-weight:600; }
+    .prio-high { background: rgba(220,38,38,0.18); color: #fca5a5; border: 1px solid rgba(220,38,38,0.35); }
+    .prio-normal { background: rgba(56,189,248,0.18); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.35); }
+    .st-open { color: #fde68a; }
+    .st-investigating { color: #93c5fd; }
+    .st-resolved { color: #86efac; }
+    .st-closed { color: #cbd5e1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+    <!-- KPI cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Total Reports</div>
+            <div class="text-3xl font-bold text-white mt-1" id="crm-total">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Open</div>
+            <div class="text-3xl font-bold text-amber-300 mt-1" id="crm-open">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Investigating</div>
+            <div class="text-3xl font-bold text-sky-300 mt-1" id="crm-investigating">0</div>
+        </div>
+        <div class="glass-panel p-4">
+            <div class="text-xs text-slate-400">Resolved</div>
+            <div class="text-3xl font-bold text-emerald-300 mt-1" id="crm-resolved">0</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <!-- Social Media Mentions (@DishubDKI) -->
+        <div class="glass-panel p-4 lg:col-span-3">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-at text-sky-400"></i> Social Media Mentions
+                    <span class="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">@DishubDKI</span>
+                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">Live</span>
+                </h3>
+                <button id="btn-refresh-mentions" class="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                    <i class="fas fa-rotate"></i> Refresh
+                </button>
+            </div>
+            <div id="mentions-feed" class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                <div class="text-slate-500 text-xs text-center py-6"><i class="fas fa-spinner fa-spin mr-1"></i> Memuat mentions...</div>
+            </div>
+            <p class="text-[10px] text-slate-600 mt-2">Monitoring real-time mention @DishubDKI di Twitter/X, Threads, Instagram, dan Facebook.</p>
+        </div>
+
+        <!-- New Report Form -->
+        <div class="glass-panel p-4 lg:col-span-1">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-3">
+                <i class="fas fa-pen-to-square text-sky-400"></i> Submit New Report
+            </h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Reporter Name</label>
+                    <input id="f-name" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" placeholder="Anonymous" />
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Contact (email / phone)</label>
+                    <input id="f-contact" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" />
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Category</label>
+                    <select id="f-category" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md">
+                        <option value="traffic">Traffic Violation</option>
+                        <option value="illegal_parking">Illegal Parking</option>
+                        <option value="public_transport">Public Transport</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Description</label>
+                    <textarea id="f-desc" rows="4" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" placeholder="Describe what happened (our AI will auto-classify the type)…"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="f-lat" type="number" step="any" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" placeholder="Latitude" />
+                    <input id="f-lng" type="number" step="any" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" placeholder="Longitude" />
+                </div>
+                <button id="f-submit" class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">
+                    <i class="fas fa-paper-plane"></i> Submit Report
+                </button>
+                <div id="f-result" class="text-xs text-slate-400"></div>
+            </div>
+        </div>
+
+        <!-- Reports table -->
+        <div class="glass-panel p-4 lg:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-envelope-open-text text-emerald-400"></i> Recent Reports
+                </h3>
+                <select id="filter-status" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md">
+                    <option value="">All</option>
+                    <option value="open">Open</option>
+                    <option value="investigating">Investigating</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                </select>
+            </div>
+            <div class="overflow-x-auto max-h-[560px]">
+            <table class="w-full text-sm">
+                <thead class="text-slate-400 text-xs uppercase">
+                    <tr>
+                        <th class="text-left py-2 px-2">Time</th>
+                        <th class="text-left py-2 px-2">Reporter</th>
+                        <th class="text-left py-2 px-2">Category</th>
+                        <th class="text-left py-2 px-2">Description</th>
+                        <th class="text-left py-2 px-2">Auto-Type</th>
+                        <th class="text-left py-2 px-2">Priority</th>
+                        <th class="text-left py-2 px-2">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="crm-body" class="text-slate-300 text-[13px]"></tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    const STATUS_OPTIONS = ['open', 'investigating', 'resolved', 'closed'];
+
+    async function loadSummary(){
+        const r = await fetch('/api/crm/summary');
+        const d = await r.json();
+        if (d.status !== 'success') return;
+        const s = d.summary || {};
+        document.getElementById('crm-total').textContent = s.total || 0;
+        const by = s.by_status || {};
+        document.getElementById('crm-open').textContent = by.open || 0;
+        document.getElementById('crm-investigating').textContent = by.investigating || 0;
+        document.getElementById('crm-resolved').textContent = by.resolved || 0;
+    }
+
+    function prettyType(t){
+        const m = { illegal_parking: 'Illegal Parking', busway_occupancy: 'Busway', bicycle_lane_occupancy: 'Bicycle Lane', illegal_pickup_dropoff: 'Pickup/Dropoff' };
+        return m[t] || (t || '-');
+    }
+
+    async function loadReports(){
+        const st = document.getElementById('filter-status').value;
+        const params = new URLSearchParams({ limit:'100' });
+        if (st) params.set('status', st);
+        const r = await fetch('/api/crm/reports?' + params.toString());
+        const d = await r.json();
+        const body = document.getElementById('crm-body');
+        if (d.status !== 'success' || !d.reports || d.reports.length === 0){
+            body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-500 py-6">No reports yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = d.reports.map(rep => {
+            const ts = new Date((rep.timestamp||0)*1000).toLocaleString();
+            const prio = rep.priority || 'normal';
+            const prioCls = prio === 'high' ? 'prio-high' : 'prio-normal';
+            const stOptions = STATUS_OPTIONS.map(s => `<option value="${s}"${rep.status===s?' selected':''}>${s}</option>`).join('');
+            return `<tr class="border-t border-slate-800/60 hover:bg-slate-800/40">
+                <td class="py-2 px-2 whitespace-nowrap">${ts}</td>
+                <td class="py-2 px-2">${rep.reporter_name || 'Anonymous'}</td>
+                <td class="py-2 px-2">${rep.category || '-'}</td>
+                <td class="py-2 px-2 max-w-[320px] truncate" title="${(rep.description||'').replace(/"/g,'&quot;')}">${rep.description || ''}</td>
+                <td class="py-2 px-2">${prettyType(rep.auto_classified_type)}</td>
+                <td class="py-2 px-2"><span class="pill ${prioCls}">${prio}</span></td>
+                <td class="py-2 px-2">
+                    <select data-id="${rep.id}" class="st-sel input-surface text-slate-200 text-xs px-2 py-1 rounded-md st-${rep.status||'open'}">${stOptions}</select>
+                </td>
+            </tr>`;
+        }).join('');
+        document.querySelectorAll('.st-sel').forEach(s => {
+            s.addEventListener('change', async e => {
+                await fetch('/api/crm/reports/' + s.dataset.id, {
+                    method:'PATCH', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ status: e.target.value })
+                });
+                loadSummary(); loadReports();
+            });
+        });
+    }
+
+    document.getElementById('filter-status').addEventListener('change', loadReports);
+    document.getElementById('f-submit').addEventListener('click', async () => {
+        const payload = {
+            reporter_name: document.getElementById('f-name').value,
+            reporter_contact: document.getElementById('f-contact').value,
+            category: document.getElementById('f-category').value,
+            description: document.getElementById('f-desc').value,
+            lat: parseFloat(document.getElementById('f-lat').value) || null,
+            lng: parseFloat(document.getElementById('f-lng').value) || null,
+        };
+        const res = document.getElementById('f-result');
+        if (!payload.description){ res.textContent = 'Description is required'; res.className='text-xs text-red-400'; return; }
+        const r = await fetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const d = await r.json();
+        if (d.status === 'success'){
+            res.innerHTML = `Report #${d.id} submitted. Auto-classified: <b>${prettyType(d.auto_classified_type)}</b> · Priority: <b>${d.priority}</b>`;
+            res.className = 'text-xs text-emerald-300';
+            ['f-name','f-contact','f-desc','f-lat','f-lng'].forEach(id => document.getElementById(id).value = '');
+            loadSummary(); loadReports();
+        } else {
+            res.textContent = 'Error: ' + (d.message||'unknown');
+            res.className = 'text-xs text-red-400';
+        }
+    });
+
+    loadSummary(); loadReports(); loadMentions();
+    setInterval(() => { loadSummary(); loadReports(); }, 20000);
+    setInterval(loadMentions, 60000); // Refresh mentions every 60s
+
+    document.getElementById('btn-refresh-mentions').addEventListener('click', loadMentions);
+
+    async function loadMentions(){
+        const feed = document.getElementById('mentions-feed');
+        try {
+            const r = await fetch('/api/crm/social_mentions');
+            const d = await r.json();
+            if (d.status !== 'success' || !d.mentions || d.mentions.length === 0){
+                feed.innerHTML = '<div class="text-slate-500 text-xs text-center py-6"><i class="fas fa-check-circle text-emerald-500 mr-1"></i> Tidak ada mention baru.</div>';
+                return;
+            }
+            feed.innerHTML = d.mentions.map(m => {
+                const prioIcon = m.priority === 'high' ? '<span class="text-red-400"><i class="fas fa-circle-exclamation"></i></span>' : '';
+                const typeLabel = m.auto_type ? `<span class="pill prio-normal">${m.auto_type.replace('_',' ')}</span>` : '';
+                const timeStr = m.pub_date ? new Date(m.pub_date).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'short'}) : '';
+                // Platform icon
+                let platformIcon = 'fab fa-x-twitter';
+                let platformColor = 'text-slate-400';
+                if (m.platform === 'instagram') { platformIcon = 'fab fa-instagram'; platformColor = 'text-pink-400'; }
+                else if (m.platform === 'threads') { platformIcon = 'fas fa-at'; platformColor = 'text-slate-300'; }
+                else if (m.platform === 'facebook') { platformIcon = 'fab fa-facebook'; platformColor = 'text-blue-400'; }
+                else if (m.platform === 'news') { platformIcon = 'fas fa-newspaper'; platformColor = 'text-amber-400'; }
+                else if (m.platform === 'twitter') { platformIcon = 'fab fa-x-twitter'; platformColor = 'text-slate-300'; }
+                return `<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-sky-500/30 transition-all">
+                    <div class="flex items-start gap-2">
+                        <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                            <i class="${platformIcon} ${platformColor} text-xs"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-white text-xs font-semibold">${m.source || 'Social Media'}</span>
+                                <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${m.platform || ''}</span>
+                                ${prioIcon}
+                                ${typeLabel}
+                                <span class="ml-auto text-[10px] text-slate-500">${timeStr}</span>
+                            </div>
+                            <p class="text-sm text-slate-300 leading-relaxed">${m.title}</p>
+                            ${m.description ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${m.description.substring(0, 150)}</p>` : ''}
+                            <div class="flex items-center gap-3 mt-2">
+                                <a href="${m.link}" target="_blank" class="text-[10px] text-sky-400 hover:text-sky-300"><i class="fas fa-external-link mr-1"></i>Buka</a>
+                                <button onclick="importMention(this)" data-title="${(m.title||'').replace(/"/g,'&quot;')}" data-type="${m.auto_type||''}" data-source="${m.source||''}" class="text-[10px] text-emerald-400 hover:text-emerald-300"><i class="fas fa-plus mr-1"></i>Import ke CRM</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            feed.innerHTML = '<div class="text-slate-500 text-xs text-center py-6">Gagal memuat mentions.</div>';
+        }
+    }
+
+    window.importMention = async function(btn){
+        const title = btn.dataset.title;
+        const type = btn.dataset.type;
+        const source = btn.dataset.source;
+        const payload = {
+            reporter_name: source || 'Social Media',
+            reporter_contact: '@DishubDKI mention',
+            category: 'traffic',
+            description: title,
+        };
+        const r = await fetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const d = await r.json();
+        if (d.status === 'success'){
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>Imported';
+            btn.classList.remove('text-emerald-400');
+            btn.classList.add('text-slate-500');
+            btn.disabled = true;
+            loadSummary(); loadReports();
+        }
+    };
+})();
+</script>
+{% endblock %}

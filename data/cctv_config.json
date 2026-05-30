@@ -1,0 +1,34 @@
+[
+    {
+        "id": "cam_d7af6ec796",
+        "name": "Halte Lapangan Panahan",
+        "url": "https://cctv.balitower.co.id/Gelora-017-700470_6/tracks-v1/index.m3u8",
+        "lat": -6.213652565831704,
+        "lng": 106.80201727201626,
+        "active": false
+    },
+    {
+        "id": "cam_ec7220906e",
+        "name": "Halte Lapangan Panahan Gelora 2",
+        "url": "https://cctv.balitower.co.id/Gelora-017-700470_8/tracks-v1/index.m3u8",
+        "lat": -6.213652565831704,
+        "lng": 106.80201727201626,
+        "active": false
+    },
+    {
+        "id": "cam_c0b5fd0fbf",
+        "name": "CCTV BENDUNGAN HILIR",
+        "url": "https://cctv.balitower.co.id/Bendungan-Hilir-003-700014_2/tracks-v1/index.m3u8",
+        "lat": -6.207415,
+        "lng": 106.803671,
+        "active": true
+    },
+    {
+        "id": "cam_b9427c4e2f",
+        "name": "CCTV GELORA",
+        "url": "https://cctv.balitower.co.id/Gelora-004-700047_2/index.m3u8",
+        "lat": -6.22489,
+        "lng": 106.80458,
+        "active": false
+    }
+]

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}PADI - Command Center{% endblock %}
+{% block header_kicker %}Command Center{% endblock %}
+{% block header_title %}Traffic Enforcement Monitoring{% endblock %}
+{% block header_actions %}
+    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-red-500/40">
+        <i class="fas fa-shield-halved text-red-300"></i>
+        <span>Enforcement</span>
+    </a>
+    <a href="/zones" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+        <i class="fas fa-draw-polygon text-sky-300"></i>
+        <span>Zones</span>
+    </a>
+{% endblock %}
+{% block head_extra %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+{% block style_extra %}
+<style>
+    #map { height: 100%; min-height: 420px; border-radius: 12px; }
+    .leaflet-popup-content-wrapper { background: transparent !important; box-shadow: none !important; border-radius: 12px !important; padding: 0 !important; }
+    .leaflet-popup-content { margin: 0 !important; }
+    .leaflet-popup-tip { background: #0f172a !important; border: 1px solid rgba(255,255,255,0.1) !important; }
+    .leaflet-popup-close-button { color: #64748b !important; font-size: 18px !important; top: 8px !important; right: 10px !important; }
+    .leaflet-popup-close-button:hover { color: #fff !important; }
+    .cam-popup { min-width: 220px; }
+    .cam-popup h4 { font-weight: 700; margin-bottom: 4px; }
+    .cam-popup .status { font-size: 11px; }
+    .feed-thumb { width: 100%; border-radius: 8px; margin-top: 6px; border: 1px solid #334155; }
+    .sidebar-feed { border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); background: #0b1220; }
+    .zone-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 9999px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
+    .zb-no_parking { background: rgba(220,38,38,0.2); color: #fca5a5; border: 1px solid rgba(220,38,38,0.3); }
+    .zb-busway { background: rgba(249,115,22,0.2); color: #fdba74; border: 1px solid rgba(249,115,22,0.3); }
+    .zb-bicycle { background: rgba(6,182,212,0.2); color: #67e8f9; border: 1px solid rgba(6,182,212,0.3); }
+    .zb-bus_stop { background: rgba(16,185,129,0.2); color: #86efac; border: 1px solid rgba(16,185,129,0.3); }
+    @media (max-width: 1023px) {
+        #map { min-height: 360px; }
+    }
+    @media (max-width: 767px) {
+        #map { min-height: 320px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
+
+        <!-- Map (main area) -->
+        <div class="xl:col-span-3 glass-panel p-2 flex flex-col min-h-[360px] md:min-h-[520px]">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-map-location-dot text-sky-400"></i> Peta CCTV & Zona Enforcement
+                </h3>
+                <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 mr-1"></span>Online</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 mr-1"></span>Zona Aktif</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400 mr-1"></span>Pelanggaran</span>
+                </div>
+            </div>
+            <div class="flex-1 rounded-xl overflow-hidden min-h-[320px] md:min-h-[500px]" id="map"></div>
+        </div>
+
+        <!-- Right sidebar: camera list + live feed -->
+        <div class="flex flex-col gap-4 xl:overflow-y-auto xl:max-h-[calc(100vh-8rem)] min-w-0">
+            <!-- Live feed -->
+            <div class="glass-panel p-3">
+                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-video text-red-400"></i> Live Feed
+                    <span class="inline-flex h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                </h4>
+                <div class="sidebar-feed">
+                    <img id="live-img" src="" class="w-full" style="display:none; min-height:140px; object-fit:cover;" />
+                    <div id="live-ph" class="flex items-center justify-center h-[140px] text-slate-600 text-xs">
+                        Klik kamera di peta
+                    </div>
+                </div>
+                <div class="text-[10px] text-slate-500 mt-1.5" id="live-label">—</div>
+            </div>
+
+            <!-- Camera list -->
+            <div class="glass-panel p-3 flex-1">
+                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-list text-sky-400"></i> Daftar CCTV
+                </h4>
+                <div id="cam-list" class="space-y-2"></div>
+            </div>
+
+            <!-- Recent violations -->
+            <div class="glass-panel p-3">
+                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-bell text-amber-400"></i> Pelanggaran Terbaru
+                </h4>
+                <div id="recent-violations" class="space-y-1.5 max-h-[200px] overflow-y-auto text-xs">
+                    <div class="text-slate-600 text-center py-3">Belum ada pelanggaran</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    let map, cameras = [], markers = {}, zones = [];
+
+    // Init map centered on Bogor
+    map = L.map('map', { zoomControl: true }).setView([-6.601, 106.800], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap © CARTO'
+    }).addTo(map);
+
+    async function loadData(){
+        // Load cameras
+        const r1 = await fetch('/api/sources');
+        cameras = await r1.json();
+
+        // Load zones
+        const r2 = await fetch('/api/zones');
+        const zd = await r2.json();
+        zones = (zd.zones || []).filter(z => z.active);
+
+        // Load recent violations
+        const r3 = await fetch('/api/violations?limit=10');
+        const vd = await r3.json();
+
+        renderMap();
+        renderCamList();
+        renderViolations(vd.violations || []);
+    }
+
+    function renderMap(){
+        // Clear existing
+        Object.values(markers).forEach(m => map.removeLayer(m));
+        markers = {};
+
+        cameras.forEach(cam => {
+            const lat = parseFloat(cam.lat);
+            const lng = parseFloat(cam.lng);
+            if (!lat || !lng) return;
+
+            const camZones = zones.filter(z => z.camera_id === cam.id);
+            const hasZones = camZones.length > 0;
+
+            // Camera marker
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="width:32px;height:32px;border-radius:50%;background:${hasZones ? 'rgba(16,185,129,0.9)' : 'rgba(100,116,139,0.8)'};border:2px solid ${hasZones ? '#10b981' : '#64748b'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
+                    <i class="fas fa-video" style="color:white;font-size:12px;"></i>
+                </div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+            });
+
+            const zoneBadges = camZones.map(z => `<span class="zone-badge zb-${z.zone_type}">${z.zone_type.replace('_',' ')}</span>`).join(' ');
+
+            const popup = `<div class="cam-popup" style="background:#0f172a;border-radius:12px;padding:16px;min-width:260px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <div style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;"></div>
+                    <h4 style="color:#f1f5f9;font-size:13px;font-weight:700;margin:0;">${cam.name}</h4>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:#94a3b8;">
+                    <span style="background:rgba(16,185,129,0.15);color:#6ee7b7;padding:2px 8px;border-radius:20px;font-weight:600;">Online</span>
+                    <span>·</span>
+                    <span>${camZones.length} zona aktif</span>
+                </div>
+                ${zoneBadges ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">' + zoneBadges + '</div>' : ''}
+                <button onclick="window._selectCam('${cam.id}')" style="width:100%;padding:8px 14px;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                    <i class="fas fa-eye"></i> Lihat Live Feed
+                </button>
+            </div>`;
+
+            const marker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
+            markers[cam.id] = marker;
+        });
+
+        // Fit bounds
+        const pts = cameras.filter(c => c.lat && c.lng).map(c => [parseFloat(c.lat), parseFloat(c.lng)]);
+        if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.3));
+    }
+
+    function renderCamList(){
+        const el = document.getElementById('cam-list');
+        el.innerHTML = cameras.map(cam => {
+            const camZones = zones.filter(z => z.camera_id === cam.id);
+            return `<div class="p-2 rounded-lg border border-slate-800 hover:border-sky-500/30 cursor-pointer transition-all" onclick="window._selectCam('${cam.id}')">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+                    <span class="text-xs text-white font-medium truncate">${cam.name}</span>
+                </div>
+                <div class="text-[10px] text-slate-500 mt-1 pl-4">
+                    ${camZones.length} zona · ${cam.active ? 'Aktif' : 'Nonaktif'}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderViolations(violations){
+        const el = document.getElementById('recent-violations');
+        if (!violations.length){
+            el.innerHTML = '<div class="text-slate-600 text-center py-3">Belum ada pelanggaran tercatat</div>';
+            return;
+        }
+        const typeColors = { illegal_parking:'text-red-300', busway_occupancy:'text-orange-300', bicycle_lane_occupancy:'text-cyan-300' };
+        const typeLabels = { illegal_parking:'Parkir Liar', busway_occupancy:'Jalur Busway', bicycle_lane_occupancy:'Jalur Sepeda', illegal_pickup_dropoff:'Ngetem' };
+        el.innerHTML = violations.slice(0, 8).map(v => {
+            const dt = new Date((v.timestamp||0)*1000);
+            const time = dt.toLocaleTimeString('id-ID', { timeZone:'Asia/Jakarta', hour:'2-digit', minute:'2-digit' });
+            return `<div class="flex items-center gap-2 p-1.5 rounded-md hover:bg-slate-800/40">
+                <span class="text-slate-500">${time}</span>
+                <span class="${typeColors[v.violation_type]||'text-slate-300'} font-medium">${typeLabels[v.violation_type]||v.violation_type}</span>
+                <span class="ml-auto font-mono text-slate-400">${v.plate_text||'—'}</span>
+            </div>`;
+        }).join('');
+    }
+
+    // Select camera: show feed + fly to marker
+    window._selectCam = function(camId){
+        const cam = cameras.find(c => c.id === camId);
+        if (!cam) return;
+
+        // Fly to marker
+        const marker = markers[camId];
+        if (marker) {
+            map.flyTo(marker.getLatLng(), 17, { animate: true, duration: 0.8 });
+            marker.openPopup();
+        }
+
+        // Switch feed
+        fetch('/api/switch_source', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: camId}) });
+        const img = document.getElementById('live-img');
+        const ph = document.getElementById('live-ph');
+        img.src = '/video_feed/' + camId + '?t=' + Date.now();
+        img.style.display = 'block';
+        ph.style.display = 'none';
+        document.getElementById('live-label').textContent = cam.name;
+    };
+
+    loadData();
+    setInterval(async () => {
+        const r = await fetch('/api/violations?limit=10');
+        const d = await r.json();
+        renderViolations(d.violations || []);
+    }, 10000);
+})();
+</script>
+{% endblock %}

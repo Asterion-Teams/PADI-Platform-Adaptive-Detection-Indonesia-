@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.deps/
+venv/
+env/
+
+# Data & Database
+data_lake/
+data/traffic_data.db
+data/violations_evidence/
+data/video/
+data/traffic_stats.json
+data/app_settings.json
+data/x_cookies.json
+data/*.tmp
+data/*.bak
+data/*.broken
+*.log
+stats_dump*.json
+
+# Models & Runtime Assets
+models/runs/
+models/*.pt
+models/*.onnx
+logs/
+
+# System
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

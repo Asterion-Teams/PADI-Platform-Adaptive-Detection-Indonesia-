@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+{% block title %}PADI - Laporan Executive{% endblock %}
+{% block header_kicker %}Laporan{% endblock %}
+{% block header_title %}Executive Summary{% endblock %}
+{% block header_actions %}
+    <button id="btn-export" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-emerald-500/40">
+        <i class="fas fa-file-csv text-emerald-300"></i>
+        <span>Export CSV</span>
+    </button>
+    <button id="btn-print" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-sm font-semibold transition-all border border-sky-500">
+        <i class="fas fa-print"></i>
+        <span>Cetak PDF</span>
+    </button>
+{% endblock %}
+{% block style_extra %}
+<style>
+    /* ===== PRINT / PDF — PROFESSIONAL GOVERNMENT REPORT STYLE ===== */
+    @media print {
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+        
+        @page { size: A4 portrait; margin: 15mm 18mm 20mm 18mm; }
+
+        body { 
+            background: white !important; 
+            color: #1a1a2e !important; 
+            font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif !important;
+            font-size: 9.5pt !important; 
+            line-height: 1.6 !important; 
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Hide UI elements */
+        aside, header, nav, .chatbot-fab, #btn-print, #btn-export, footer,
+        .period-btn, #period-group, #generated-at { display: none !important; }
+        main { padding: 0 !important; margin: 0 !important; width: 100% !important; }
+        .flex-1 { overflow: visible !important; padding: 0 !important; }
+        .space-y-5 > * + * { margin-top: 14px !important; }
+
+        /* ======== HEADER / KOP SURAT ======== */
+        .print-header { 
+            display: block !important; 
+            margin-bottom: 18px;
+        }
+        .print-header-top {
+            display: flex !important;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding-bottom: 14px;
+            border-bottom: 2.5px solid #0f172a;
+            position: relative;
+        }
+        .print-header-top::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 80px;
+            height: 2.5px;
+            background: #2563eb;
+        }
+        .print-header-left h1 { 
+            font-size: 18pt !important; 
+            font-weight: 800 !important; 
+            color: #0f172a !important; 
+            margin: 0 !important;
+            letter-spacing: -0.5px;
+        }
+        .print-header-left p { 
+            font-size: 8.5pt !important; 
+            color: #64748b !important; 
+            margin: 3px 0 0 0 !important;
+        }
+        .print-header-right {
+            text-align: right;
+            font-size: 8.5pt;
+            color: #475569;
+            line-height: 1.5;
+        }
+        .print-header-right strong { 
+            color: #0f172a; 
+            font-size: 9.5pt;
+            display: block;
+            margin-bottom: 1px;
+        }
+        .print-meta-bar { 
+            display: flex !important; 
+            justify-content: space-between;
+            align-items: center;
+            font-size: 8pt; 
+            color: #64748b; 
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+        .print-meta-bar .doc-id {
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 7.5pt;
+            color: #94a3b8;
+            letter-spacing: 0.5px;
+        }
+
+        /* ======== KPI SECTION ======== */
+        .grid-cols-2, .md\:grid-cols-4 { 
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important; 
+            gap: 0 !important;
+        }
+        .kpi-card { 
+            background: white !important;
+            border: none !important;
+            border-right: 1px solid #e2e8f0 !important;
+            border-radius: 0 !important;
+            padding: 16px 12px !important;
+            text-align: center !important;
+            page-break-inside: avoid;
+        }
+        .kpi-card:last-child { border-right: none !important; }
+        .grid-cols-2, .md\:grid-cols-4 {
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+        }
+        .kpi-value { font-size: 22pt !important; color: #0f172a !important; font-weight: 800 !important; line-height: 1.1 !important; }
+        .kpi-label { color: #64748b !important; font-size: 6.5pt !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.8px !important; margin-top: 6px !important; }
+        .metric-up { color: #dc2626 !important; }
+        .metric-down { color: #059669 !important; }
+        .text-emerald-400 { color: #059669 !important; }
+        .text-sky-400 { color: #2563eb !important; }
+
+        /* ======== PANELS / SECTIONS ======== */
+        .glass-panel {
+            background: white !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            padding: 16px 18px !important;
+            page-break-inside: avoid;
+            margin-bottom: 0 !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+        }
+
+        /* ======== SECTION HEADINGS ======== */
+        h3 { 
+            font-size: 10pt !important; 
+            color: #0f172a !important; 
+            font-weight: 700 !important; 
+            margin: 0 0 12px 0 !important;
+            padding-bottom: 8px !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        h3 i { font-size: 9pt !important; }
+        h3 i.text-sky-400 { color: #2563eb !important; }
+        h3 i.text-amber-400 { color: #d97706 !important; }
+        h3 i.text-red-400 { color: #dc2626 !important; }
+        h3 i.text-purple-400 { color: #7c3aed !important; }
+
+        /* ======== NARRATIVE BULLETS ======== */
+        .bullet { 
+            border-left: 3px solid #2563eb !important; 
+            background: #f8fafc !important; 
+            color: #334155 !important;
+            padding: 10px 14px !important;
+            font-size: 9pt !important;
+            margin-bottom: 8px !important;
+            border-radius: 0 6px 6px 0 !important;
+            line-height: 1.55 !important;
+        }
+
+        /* ======== PROGRESS BARS (Breakdown) ======== */
+        .progress-bar { background: #f1f5f9 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important; margin-top: 4px !important; }
+        .progress-fill { border-radius: 3px !important; }
+        .text-slate-200 { color: #1e293b !important; font-weight: 500 !important; }
+        .text-slate-500 { color: #94a3b8 !important; }
+
+        /* ======== HOTSPOT TABLE ======== */
+        .hotspot-row { 
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            border-bottom: 1px solid #f1f5f9 !important; 
+            padding: 9px 0 !important; 
+        }
+        .hotspot-row:last-child { border-bottom: none !important; }
+        .hotspot-row span, .hotspot-row div { color: #334155 !important; font-size: 9pt !important; }
+        .hotspot-row .w-7 { 
+            width: 24px !important; height: 24px !important;
+            background: #f1f5f9 !important; 
+            border: 1.5px solid #e2e8f0 !important; 
+            color: #475569 !important;
+            border-radius: 50% !important;
+            display: flex !important; align-items: center !important; justify-content: center !important;
+            font-size: 8pt !important; font-weight: 700 !important;
+        }
+
+        /* ======== RECOMMENDATION CARDS ======== */
+        .lg\:grid-cols-3, .md\:grid-cols-2 { 
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important; 
+            gap: 10px !important;
+        }
+        .mini-card { 
+            background: #f8fafc !important; 
+            border: 1px solid #e2e8f0 !important;
+            padding: 12px 14px !important; 
+            border-radius: 8px !important;
+            page-break-inside: avoid;
+        }
+        .mini-card .text-white { color: #0f172a !important; font-size: 9pt !important; font-weight: 600 !important; }
+        .mini-card .text-slate-400 { color: #64748b !important; font-size: 8pt !important; }
+        .mini-card span[class*="bg-red"] { background: #fef2f2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; font-size: 7.5pt !important; padding: 3px 8px !important; border-radius: 4px !important; font-weight: 600 !important; }
+        .mini-card span[class*="bg-amber"] { background: #fffbeb !important; color: #92400e !important; border: 1px solid #fde68a !important; font-size: 7.5pt !important; padding: 3px 8px !important; border-radius: 4px !important; font-weight: 600 !important; }
+        .mini-card span[class*="bg-slate"] { background: #f8fafc !important; color: #475569 !important; border: 1px solid #e2e8f0 !important; font-size: 7.5pt !important; padding: 3px 8px !important; border-radius: 4px !important; font-weight: 600 !important; }
+
+        /* ======== TWO-COLUMN GRID ======== */
+        .lg\:grid-cols-2 { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+
+        /* ======== FOOTER ======== */
+        .print-footer { 
+            display: block !important; 
+            margin-top: 28px; 
+            padding-top: 12px; 
+            border-top: 2px solid #0f172a;
+            position: relative;
+        }
+        .print-footer::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: 0;
+            width: 50px;
+            height: 2px;
+            background: #2563eb;
+        }
+        .print-footer p { margin: 2px 0; font-size: 7.5pt; color: #94a3b8; text-align: center; }
+        .print-footer p:first-child { font-weight: 700; color: #475569; font-size: 8.5pt; letter-spacing: 0.3px; }
+
+        /* ======== PAGE NUMBER ======== */
+        @page { @bottom-right { content: counter(page); font-size: 8pt; color: #94a3b8; } }
+
+        /* ======== WATERMARK ======== */
+        .print-watermark { display: none !important; }
+    }
+
+    /* ===== SCREEN STYLES ===== */
+    .kpi-card { text-align: center; padding: 1.25rem; border-radius: 0.85rem; background: rgba(15,23,42,0.4); border: 1px solid rgba(255,255,255,0.05); }
+    .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+    .kpi-label { font-size: 0.7rem; color: #64748b; margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-up { color: #f87171; }
+    .metric-down { color: #34d399; }
+    .bullet { padding: 0.5rem 0.75rem; border-left: 3px solid #38bdf8; background: rgba(56,189,248,0.04); border-radius: 0 0.5rem 0.5rem 0; font-size: 0.85rem; }
+    .mini-card { background: rgba(15,23,42,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 0.75rem; }
+    .progress-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+    .hotspot-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .hotspot-row:last-child { border-bottom: none; }
+    .print-header { display: none; }
+    .print-footer { display: none; }
+    .print-meta-bar { display: none; }
+    .print-header-top { display: none; }
+    .print-watermark { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+
+    <!-- Print-only header -->
+    <div class="print-header">
+        <div class="print-header-top">
+            <div class="print-header-left">
+                <h1>Executive Summary</h1>
+                <p>Laporan Monitoring Pelanggaran Lalu Lintas — PADI Platform</p>
+            </div>
+            <div class="print-header-right">
+                <strong>DISHUB DKI Jakarta</strong>
+                AI Open Innovation Challenge 2026<br>
+                Team Asterion
+            </div>
+        </div>
+        <div class="print-meta-bar">
+            <span id="print-period">Periode: Harian (24 Jam)</span>
+            <span id="print-generated">—</span>
+            <span class="doc-id" id="print-doc-id">—</span>
+        </div>
+    </div>
+    <div class="print-watermark">CONFIDENTIAL</div>
+
+    <!-- Period selector -->
+    <div class="glass-panel p-3 flex flex-wrap items-center gap-3">
+        <span class="text-xs text-slate-400">Periode:</span>
+        <div class="flex gap-1.5" id="period-group">
+            <button data-period="24h" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition active bg-sky-600 border-sky-500 text-white">Harian (24H)</button>
+            <button data-period="7d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition">Mingguan (7D)</button>
+            <button data-period="30d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition">Bulanan (30D)</button>
+        </div>
+        <span class="ml-auto text-[11px] text-slate-600" id="generated-at">—</span>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="kpi-card">
+            <div class="kpi-value text-white" id="exec-total">0</div>
+            <div class="kpi-label">Total Pelanggaran</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value" id="exec-delta"><span class="text-slate-500">—</span></div>
+            <div class="kpi-label">vs Periode Sebelumnya</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value text-emerald-400" id="exec-crm-total">0</div>
+            <div class="kpi-label">Laporan Publik</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value text-sky-400" id="exec-cameras">0</div>
+            <div class="kpi-label">Kamera Aktif</div>
+        </div>
+    </div>
+
+    <!-- Narrative -->
+    <div class="glass-panel p-5">
+        <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-file-lines text-sky-400"></i> Ringkasan Naratif
+        </h3>
+        <ul id="exec-narrative" class="space-y-2"></ul>
+    </div>
+
+    <!-- Two-column: breakdown + hotspots -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="glass-panel p-5">
+            <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <i class="fas fa-chart-pie text-amber-400"></i> Breakdown Jenis Pelanggaran
+            </h3>
+            <div id="exec-bytype" class="space-y-3"></div>
+        </div>
+        <div class="glass-panel p-5">
+            <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+                <i class="fas fa-map-location-dot text-red-400"></i> Hotspot Pelanggaran
+            </h3>
+            <div id="exec-hotspots"></div>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="glass-panel p-5">
+        <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+            <i class="fas fa-lightbulb text-purple-400"></i> Rekomendasi Enforcement
+        </h3>
+        <div id="exec-recs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
+
+    <!-- Print-only footer -->
+    <div class="print-footer">
+        <p>PADI — Platform Adaptive Deteksi Indonesia</p>
+        <p>© 2026 Team Asterion · AI Open Innovation Challenge · DISHUB DKI Jakarta</p>
+        <p>Dokumen ini dihasilkan secara otomatis oleh sistem monitoring CCTV real-time.</p>
+    </div>
+</div>
+
+<script>
+(function(){
+    let period = '24h';
+    const typeLabels = {
+        illegal_parking: 'Parkir Liar',
+        busway_occupancy: 'Pelanggaran Busway',
+        bicycle_lane_occupancy: 'Pelanggaran Jalur Sepeda',
+        illegal_pickup_dropoff: 'Ngetem/Berhenti Sembarangan',
+        wrong_way: 'Lawan Arah'
+    };
+    const typeColors = {
+        illegal_parking: '#ef4444',
+        busway_occupancy: '#f59e0b',
+        bicycle_lane_occupancy: '#06b6d4',
+        illegal_pickup_dropoff: '#8b5cf6',
+        wrong_way: '#ec4899'
+    };
+    function prettyType(t) { return typeLabels[t] || t || 'Unknown'; }
+
+    async function load() {
+        const r = await fetch('/api/violations/executive_summary?period=' + encodeURIComponent(period));
+        const d = await r.json();
+        if (d.status !== 'success') return;
+
+        document.getElementById('generated-at').textContent = 'Dibuat: ' + new Date().toLocaleString('id-ID');
+        const periodLabel = period === '24h' ? 'Harian (24 Jam)' : period === '7d' ? 'Mingguan (7 Hari)' : 'Bulanan (30 Hari)';
+        document.getElementById('print-period').textContent = 'Periode: ' + periodLabel;
+        document.getElementById('print-generated').textContent = 'Dicetak: ' + new Date().toLocaleString('id-ID', {dateStyle:'long', timeStyle:'short'});
+        document.getElementById('print-doc-id').textContent = 'DOC-' + Date.now().toString(36).toUpperCase();
+        document.getElementById('exec-total').textContent = (d.summary && d.summary.total) || 0;
+        document.getElementById('exec-cameras').textContent = (d.summary && d.summary.cameras_count) || '—';
+
+        // Delta
+        const dp = d.delta_pct;
+        const deltaEl = document.getElementById('exec-delta');
+        if (dp === null || dp === undefined) deltaEl.innerHTML = '<span class="text-slate-500">—</span>';
+        else if (dp > 0) deltaEl.innerHTML = '<span class="metric-up"><i class="fas fa-arrow-up text-xs"></i> ' + dp + '%</span>';
+        else if (dp < 0) deltaEl.innerHTML = '<span class="metric-down"><i class="fas fa-arrow-down text-xs"></i> ' + Math.abs(dp) + '%</span>';
+        else deltaEl.innerHTML = '<span class="text-slate-400">0%</span>';
+
+        document.getElementById('exec-crm-total').textContent = (d.crm && d.crm.total) || 0;
+
+        // Narrative
+        const narr = d.narrative || [];
+        document.getElementById('exec-narrative').innerHTML = narr.length
+            ? narr.map(function(b) { return '<li class="bullet">' + b + '</li>'; }).join('')
+            : '<li class="text-slate-500 text-sm">Tidak ada data untuk periode ini.</li>';
+
+        // By-type breakdown
+        const byType = (d.summary && d.summary.by_type) || {};
+        const totalType = Object.values(byType).reduce(function(a,b){return a+b;}, 0) || 1;
+        const sorted = Object.entries(byType).sort(function(a,b){return b[1]-a[1];});
+        document.getElementById('exec-bytype').innerHTML = sorted.length ? sorted.map(function(entry) {
+            var k = entry[0], v = entry[1];
+            var pct = Math.round(v / totalType * 100);
+            var color = typeColors[k] || '#64748b';
+            return '<div><div class="flex justify-between items-center mb-1"><span class="text-sm text-slate-200">' + prettyType(k) + '</span><span class="text-sm font-bold text-white">' + v + ' <span class="text-slate-500 text-xs font-normal">(' + pct + '%)</span></span></div><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;background:' + color + '"></div></div></div>';
+        }).join('') : '<div class="text-slate-500 text-sm">Tidak ada pelanggaran.</div>';
+
+        // Hotspots
+        const byCam = (d.summary && d.summary.by_camera) || [];
+        document.getElementById('exec-hotspots').innerHTML = byCam.length ? byCam.slice(0, 8).map(function(c, i) {
+            var medal = i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-600';
+            return '<div class="hotspot-row"><span class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold flex items-center justify-center ' + medal + '">' + (i+1) + '</span><div class="flex-1 min-w-0 truncate text-sm text-slate-200">' + (c.camera_name || c.camera_id) + '</div><div class="text-sm font-bold text-white">' + c.count + '</div></div>';
+        }).join('') : '<div class="text-slate-500 text-sm py-4 text-center">Tidak ada data hotspot.</div>';
+
+        // Recommendations
+        const recs = d.top_recommendations || [];
+        document.getElementById('exec-recs').innerHTML = recs.length ? recs.map(function(rec) {
+            var actionHtml = '';
+            if (rec.recommendation === 'install_etle_camera') actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/20"><i class="fas fa-camera"></i> Pasang E-TLE</span>';
+            else if (rec.recommendation === 'officer_patrol') actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/20"><i class="fas fa-user-shield"></i> Patroli Petugas</span>';
+            else actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-slate-500/15 text-slate-400 border border-slate-500/20"><i class="fas fa-eye"></i> Monitor</span>';
+            return '<div class="mini-card p-3.5"><div class="text-white font-semibold text-sm truncate">' + (rec.camera_name || rec.camera_id) + '</div><div class="flex items-center gap-3 mt-2 text-xs text-slate-400"><span>Skor: <b class="text-white">' + rec.score + '</b></span><span>' + rec.violations_per_day + '/hari</span></div><div class="mt-2.5">' + actionHtml + '</div></div>';
+        }).join('') : '<div class="text-slate-500 text-sm col-span-full text-center py-4">Belum ada rekomendasi.</div>';
+    }
+
+    document.querySelectorAll('#period-group .period-btn').forEach(function(b) {
+        b.addEventListener('click', function() {
+            period = b.dataset.period;
+            document.querySelectorAll('#period-group .period-btn').forEach(function(x) {
+                var isActive = x === b;
+                x.classList.toggle('bg-sky-600', isActive);
+                x.classList.toggle('border-sky-500', isActive);
+                x.classList.toggle('text-white', isActive);
+                x.classList.toggle('text-slate-400', !isActive);
+                x.classList.toggle('border-slate-700', !isActive);
+            });
+            load();
+        });
+    });
+
+    document.getElementById('btn-print').addEventListener('click', function() { window.print(); });
+    document.getElementById('btn-export').addEventListener('click', function() { window.open('/api/violations/export_csv?period=' + period); });
+
+    load();
+})();
+</script>
+{% endblock %}

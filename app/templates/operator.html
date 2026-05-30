@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PADI - Operator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { background:#0b1220; font-family:'Inter',sans-serif; color:#e2e8f0; margin:0; overflow:hidden; }
+        #map { position:absolute; top:64px; left:0; right:0; bottom:0; z-index:1; }
+        .top-bar { height:64px; background:rgba(2,6,23,0.9); backdrop-filter:blur(14px); border-bottom:1px solid rgba(255,255,255,0.06); position:relative; z-index:1000; }
+        .stat-pill { background:rgba(15,23,42,0.7); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:7px 12px; font-size:11px; }
+        .stat-pill.active { border-color:rgba(249,115,22,0.4); background:rgba(249,115,22,0.08); }
+        /* Floating violations popup */
+        .violations-popup {
+            position:absolute; bottom:20px; left:20px; z-index:900;
+            width:360px; max-height:320px;
+            background:rgba(2,6,23,0.92); backdrop-filter:blur(16px);
+            border:1px solid rgba(255,255,255,0.08); border-radius:14px;
+            box-shadow:0 20px 60px -15px rgba(0,0,0,0.7);
+            display:flex; flex-direction:column; overflow:hidden;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .violations-popup.hidden { opacity:0; transform:translateY(10px); pointer-events:none; }
+        .v-card { background:rgba(15,23,42,0.4); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:8px 10px; transition:all 0.15s; cursor:pointer; }
+        .v-card:hover { border-color:rgba(56,189,248,0.25); background:rgba(15,23,42,0.6); }
+        .v-badge { font-size:8px; padding:2px 5px; border-radius:3px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; }
+        .v-badge.parking { background:rgba(239,68,68,0.15); color:#fca5a5; }
+        .v-badge.busway { background:rgba(245,158,11,0.15); color:#fcd34d; }
+        .v-badge.bicycle { background:rgba(6,182,212,0.15); color:#67e8f9; }
+        .leaflet-popup-content-wrapper { background:rgba(15,23,42,0.95); border:1px solid rgba(255,255,255,0.1); border-radius:12px; box-shadow:0 15px 40px -10px rgba(0,0,0,0.7); }
+        .leaflet-popup-tip { background:rgba(15,23,42,0.95); }
+        .leaflet-popup-close-button { color:#94a3b8 !important; }
+        .cam-popup .title { font-weight:600; font-size:13px; color:#fff; margin-bottom:4px; }
+        .cam-popup .meta { font-size:11px; color:#94a3b8; }
+        .cam-popup .preview { border-radius:8px; overflow:hidden; margin-top:8px; background:#0f172a; }
+        .cam-popup .preview img { width:100%; height:120px; object-fit:cover; }
+        @keyframes ping { 0% { transform:scale(1); opacity:0.5; } 100% { transform:scale(1.6); opacity:0; } }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar flex items-center justify-between px-5">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-slate-900/60 border border-white/10 flex items-center justify-center">
+                <img src="/static/img/logo.png" alt="Logo" class="h-6 w-auto">
+            </div>
+            <div>
+                <div class="text-white font-semibold text-sm">PADI</div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest">Platform Adaptive Deteksi Indonesia</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+            <div class="stat-pill flex items-center gap-2">
+                <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-slate-300"><span id="cam-count">0</span> Kamera</span>
+            </div>
+            <div class="stat-pill flex items-center gap-2">
+                <i class="fas fa-fire text-orange-400 text-xs"></i>
+                <span class="text-slate-300"><span id="violation-count">0</span> Pelanggaran</span>
+            </div>
+            <button onclick="toggleHeatmap()" id="btn-heatmap" class="stat-pill active flex items-center gap-2 cursor-pointer hover:border-orange-500/50 transition">
+                <i class="fas fa-map text-orange-300 text-xs"></i>
+                <span class="text-slate-300">Heatmap</span>
+            </button>
+            <button onclick="toggleViolations()" id="btn-violations" class="stat-pill flex items-center gap-2 cursor-pointer hover:border-sky-500/30 transition">
+                <i class="fas fa-bell text-sky-300 text-xs"></i>
+                <span class="text-slate-300">Violations</span>
+            </button>
+            <a href="/login" class="stat-pill flex items-center gap-2 hover:border-white/20 transition">
+                <i class="fas fa-user-shield text-slate-400 text-xs"></i>
+                <span class="text-slate-300">Admin</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Map (full screen) -->
+    <div id="map"></div>
+
+    <!-- Floating Violations List -->
+    <div class="violations-popup hidden" id="v-popup">
+        <div class="px-4 py-3 border-b border-white/5 flex items-center justify-between flex-shrink-0">
+            <h3 class="text-white font-semibold text-xs flex items-center gap-2">
+                <i class="fas fa-bell text-amber-400"></i> Pelanggaran Terbaru
+            </h3>
+            <button onclick="toggleViolations()" class="text-slate-500 hover:text-white text-sm"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="v-list" class="flex-1 overflow-y-auto p-2.5 space-y-1.5"></div>
+    </div>
+
+    <!-- Violation Detail Modal -->
+    <div id="v-modal" class="fixed inset-0 z-[2000] hidden items-center justify-center" style="background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)">
+        <div class="w-full max-w-lg mx-4 rounded-2xl overflow-hidden" style="background:rgba(10,15,30,0.97);border:1px solid rgba(255,255,255,0.08);box-shadow:0 30px 80px -20px rgba(0,0,0,0.8)">
+            <!-- Header -->
+            <div class="px-5 py-3 flex items-center justify-between border-b border-white/5">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                    <span class="text-white font-semibold text-sm" id="vm-title">—</span>
+                </div>
+                <button onclick="closeDetail()" class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white"><i class="fas fa-times text-xs"></i></button>
+            </div>
+            <!-- Evidence Image -->
+            <div class="bg-black">
+                <img id="vm-img" class="w-full max-h-[300px] object-contain" src="" alt="evidence">
+            </div>
+            <!-- Info -->
+            <div class="px-5 py-3 grid grid-cols-2 gap-3 text-xs border-b border-white/5">
+                <div><span class="text-slate-500 block text-[10px]">Kamera</span><span class="text-slate-200" id="vm-camera">—</span></div>
+                <div><span class="text-slate-500 block text-[10px]">Waktu</span><span class="text-slate-200" id="vm-time">—</span></div>
+                <div><span class="text-slate-500 block text-[10px]">Kendaraan</span><span class="text-slate-200" id="vm-vehicle">—</span></div>
+                <div><span class="text-slate-500 block text-[10px]">Durasi</span><span class="text-slate-200" id="vm-duration">—</span></div>
+                <div><span class="text-slate-500 block text-[10px]">Plat Nomor</span><span class="text-slate-200 font-mono" id="vm-plate">—</span></div>
+                <div><span class="text-slate-500 block text-[10px]">Status</span><span class="text-slate-200" id="vm-status">—</span></div>
+            </div>
+            <!-- Actions -->
+            <div class="px-5 py-3 flex items-center gap-2">
+                <button onclick="actionViolation('dispatched')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition"><i class="fas fa-truck mr-1"></i>Kirim Petugas</button>
+                <button onclick="actionViolation('resolved')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition"><i class="fas fa-check mr-1"></i>Selesai</button>
+                <button onclick="actionViolation('rejected')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-300 transition"><i class="fas fa-times mr-1"></i>Tolak</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const map = L.map('map', { center: [-6.595, 106.795], zoom: 14, zoomControl: true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+    }).addTo(map);
+
+    let heatLayer = null;
+    let heatmapVisible = true;
+    let markers = [];
+    let camerasData = [];
+    let violationsData = [];
+    let selectedViolationId = null;
+
+    function makeCamIcon(color, pulse) {
+        const pulseRing = pulse ? '<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid '+color+';opacity:0.4;animation:ping 1.5s infinite"></div>' : '';
+        return L.divIcon({
+            html: '<div style="position:relative;width:38px;height:38px">'+pulseRing+'<div style="position:absolute;inset:3px;background:'+color+';border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.3);box-shadow:0 4px 15px '+color+'66"><i class="fas fa-video" style="color:#fff;font-size:12px"></i></div></div>',
+            className: '', iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -21],
+        });
+    }
+
+    async function loadCameras() {
+        try {
+            const [srcRes, denRes] = await Promise.all([fetch('/api/sources'), fetch('/api/density')]);
+            camerasData = await srcRes.json();
+            const denData = await denRes.json();
+            const densityMap = {};
+            if (denData.status === 'success') {
+                (denData.cameras || []).forEach(function(c) { densityMap[c.camera_id] = c; });
+            }
+            document.getElementById('cam-count').textContent = camerasData.length;
+            markers.forEach(function(m) { map.removeLayer(m); });
+            markers = [];
+            camerasData.forEach(function(cam) {
+                if (cam.lat == null || cam.lng == null) return;
+                const den = densityMap[cam.id] || {};
+                const density = den.density || {level:'lancar', label:'Lancar', color:'#10b981', score:1};
+                const count = den.current_count || 0;
+                const isPulse = density.score >= 3;
+                const icon = makeCamIcon(density.color, isPulse);
+                const marker = L.marker([cam.lat, cam.lng], { icon: icon }).addTo(map);
+                marker.bindPopup('<div class="cam-popup"><div class="title">'+( cam.name || cam.id)+'</div><div class="meta" style="margin-top:6px"><span style="background:'+density.color+'22;color:'+density.color+';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;border:1px solid '+density.color+'44">'+density.label+'</span><span style="margin-left:8px;color:#94a3b8;font-size:11px">'+count+' kendaraan</span></div><div class="preview"><img src="/api/snapshot/'+cam.id+'?t='+Date.now()+'" alt="" onerror="this.style.display=\'none\'"></div><div class="meta" style="margin-top:6px"><i class="fas fa-map-pin"></i> '+Number(cam.lat).toFixed(5)+', '+Number(cam.lng).toFixed(5)+'</div></div>', { maxWidth: 280 });
+                markers.push(marker);
+            });
+            if (markers.length > 1) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+            else if (markers.length === 1) map.setView(markers[0].getLatLng(), 15);
+            buildCameraHeatmap();
+        } catch(e) {}
+    }
+
+    async function buildCameraHeatmap() {
+        let camViolations = {};
+        try {
+            const r = await fetch('/api/violations/heatmap');
+            const d = await r.json();
+            if (d.status === 'success' && d.data) d.data.forEach(item => { camViolations[item.camera_id] = item.count || 0; });
+        } catch(e) {}
+        const points = [];
+        camerasData.forEach(cam => {
+            if (cam.lat == null || cam.lng == null) return;
+            const count = camViolations[cam.id] || 0;
+            const intensity = Math.min(1.0, 0.1 + (count / 20));
+            points.push([cam.lat, cam.lng, intensity]);
+        });
+        if (heatLayer) map.removeLayer(heatLayer);
+        if (points.length > 0) {
+            heatLayer = L.heatLayer(points, {
+                radius: 50, blur: 35, maxZoom: 16, max: 1.0,
+                gradient: {0.1:'#1e3a5f', 0.3:'#1e40af', 0.5:'#7c3aed', 0.7:'#f59e0b', 0.9:'#ef4444', 1.0:'#ff0000'}
+            });
+            if (heatmapVisible) heatLayer.addTo(map);
+        }
+    }
+
+    async function loadViolations() {
+        try {
+            const r = await fetch('/api/violations?limit=25');
+            const d = await r.json();
+            violationsData = d.violations || d || [];
+            document.getElementById('violation-count').textContent = violationsData.length;
+            renderViolationsList();
+        } catch(e) {}
+    }
+
+    function renderViolationsList() {
+        const list = document.getElementById('v-list');
+        if (!violationsData.length) {
+            list.innerHTML = '<div class="text-center text-slate-500 text-xs py-4"><i class="fas fa-check-circle text-emerald-700 block mb-1"></i>Tidak ada pelanggaran.</div>';
+            return;
+        }
+        list.innerHTML = violationsData.map((v, i) => {
+            const dt = new Date((v.timestamp || 0) * 1000);
+            const time = dt.toLocaleString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+            const typeMap = {illegal_parking:'Parkir Liar', busway_occupancy:'Jalur Busway', bicycle_lane_occupancy:'Jalur Sepeda'};
+            const badgeMap = {illegal_parking:'parking', busway_occupancy:'busway', bicycle_lane_occupancy:'bicycle'};
+            const iconMap = {illegal_parking:'fa-parking', busway_occupancy:'fa-bus', bicycle_lane_occupancy:'fa-bicycle'};
+            const type = typeMap[v.violation_type] || v.violation_type;
+            const badge = badgeMap[v.violation_type] || 'parking';
+            const statusDot = v.status === 'resolved' ? 'bg-emerald-400' : v.status === 'dispatched' ? 'bg-sky-400' : v.status === 'rejected' ? 'bg-slate-500' : 'bg-amber-400';
+            return `<div class="v-card" onclick="openDetail(${i})">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-flex h-1.5 w-1.5 rounded-full ${statusDot}"></span>
+                        <span class="v-badge ${badge}">${type}</span>
+                    </div>
+                    <span class="text-[9px] text-slate-600">${time}</span>
+                </div>
+                <div class="text-[11px] text-slate-300 truncate mt-1">${v.camera_name || '-'}</div>
+                <div class="flex gap-3 mt-0.5 text-[9px] text-slate-500">
+                    <span><i class="fas fa-car mr-0.5"></i>${v.vehicle_class||'-'}</span>
+                    <span><i class="fas fa-clock mr-0.5"></i>${Math.round(v.duration_s||0)}s</span>
+                    ${v.plate_text ? `<span class="font-mono">${v.plate_text}</span>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function openDetail(idx) {
+        const v = violationsData[idx];
+        if (!v) return;
+        selectedViolationId = v.id;
+        const dt = new Date((v.timestamp || 0) * 1000);
+        const typeMap = {illegal_parking:'Parkir Liar', busway_occupancy:'Jalur Busway', bicycle_lane_occupancy:'Jalur Sepeda'};
+        document.getElementById('vm-title').textContent = (typeMap[v.violation_type] || v.violation_type) + ' — ' + (v.camera_name || '');
+        document.getElementById('vm-img').src = v.evidence_path ? '/evidence/' + v.evidence_path : '';
+        document.getElementById('vm-camera').textContent = v.camera_name || v.camera_id || '-';
+        document.getElementById('vm-time').textContent = dt.toLocaleString('id-ID');
+        document.getElementById('vm-vehicle').textContent = v.vehicle_class || '-';
+        document.getElementById('vm-duration').textContent = Math.round(v.duration_s || 0) + 's';
+        document.getElementById('vm-plate').textContent = v.plate_text || '—';
+        document.getElementById('vm-status').textContent = (v.status || 'pending').toUpperCase();
+        document.getElementById('v-modal').classList.remove('hidden');
+        document.getElementById('v-modal').classList.add('flex');
+        if (v.lat && v.lng) map.flyTo([v.lat, v.lng], 16, {duration: 0.5});
+    }
+
+    function closeDetail() {
+        document.getElementById('v-modal').classList.add('hidden');
+        document.getElementById('v-modal').classList.remove('flex');
+        selectedViolationId = null;
+    }
+
+    async function actionViolation(status) {
+        if (!selectedViolationId) return;
+        try {
+            await fetch('/api/violations/' + selectedViolationId, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({status})
+            });
+            closeDetail();
+            loadViolations();
+        } catch(e) {}
+    }
+
+    function toggleHeatmap() {
+        heatmapVisible = !heatmapVisible;
+        const btn = document.getElementById('btn-heatmap');
+        if (heatmapVisible && heatLayer) { heatLayer.addTo(map); btn.classList.add('active'); }
+        else if (heatLayer) { map.removeLayer(heatLayer); btn.classList.remove('active'); }
+    }
+
+    function toggleViolations() { document.getElementById('v-popup').classList.toggle('hidden'); }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+    // Init
+    loadCameras();
+    loadViolations();
+    setInterval(loadViolations, 15000);
+    setInterval(loadCameras, 60000);
+    </script>
+</body>
+</html>

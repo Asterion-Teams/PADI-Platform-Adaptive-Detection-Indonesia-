@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% block title %}PADI - Zone Editor{% endblock %}
+{% block header_kicker %}Enforcement{% endblock %}
+{% block header_title %}Violation Zone Editor{% endblock %}
+{% block header_actions %}
+    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+        <i class="fas fa-chart-line text-sky-300"></i>
+        <span>Enforcement Dashboard</span>
+    </a>
+    <button onclick="document.getElementById('add-cam-modal').classList.remove('hidden');document.getElementById('add-cam-modal').classList.add('flex');" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-emerald-600/80 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all border border-emerald-500/50">
+        <i class="fas fa-plus"></i>
+        <span>Tambah Kamera</span>
+    </button>
+{% endblock %}
+{% block style_extra %}
+<style>
+    .canvas-wrap { position: relative; display: inline-block; background: #0b1220; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; }
+    #frame-img { display:block; max-width:100%; user-select:none; -webkit-user-drag: none; }
+    #zone-canvas { position:absolute; inset:0; cursor: crosshair; }
+    .zone-type-pill { cursor:pointer; padding: 6px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; border: 1px solid; }
+    .zone-type-pill.active { transform: scale(1.05); }
+    .zt-no_parking { background: rgba(220,38,38,0.12); color: #fca5a5; border-color: rgba(220,38,38,0.5); }
+    .zt-busway { background: rgba(249,115,22,0.12); color: #fdba74; border-color: rgba(249,115,22,0.5); }
+    .zt-bicycle { background: rgba(6,182,212,0.12); color: #67e8f9; border-color: rgba(6,182,212,0.5); }
+    .zt-bus_stop { background: rgba(16,185,129,0.12); color: #86efac; border-color: rgba(16,185,129,0.5); }
+    .zt-wrong_way { background: rgba(168,85,247,0.12); color: #d8b4fe; border-color: rgba(168,85,247,0.5); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+    <div class="glass-panel p-4 flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-video text-slate-400"></i>
+            <select id="camera-sel" class="input-surface text-slate-200 text-sm px-3 py-2 rounded-md min-w-[260px]"></select>
+            <button id="btn-delete-cam" class="px-2.5 py-2 rounded-md bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-600/30 text-xs" title="Hapus kamera ini">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        <div class="flex items-center gap-1.5 ml-auto" id="zt-group">
+            <span class="text-xs text-slate-400 mr-2">Zone type:</span>
+            <span data-type="no_parking" class="zone-type-pill zt-no_parking active">No Parking</span>
+            <span data-type="busway" class="zone-type-pill zt-busway">Busway</span>
+            <span data-type="bicycle" class="zone-type-pill zt-bicycle">Bicycle Lane</span>
+            <span data-type="wrong_way" class="zone-type-pill zt-wrong_way">Lawan Arah</span>
+            <span data-type="bus_stop" class="zone-type-pill zt-bus_stop">Bus Stop</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="glass-panel p-4 lg:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-draw-polygon text-sky-400"></i>
+                    Draw zone (click to add points, double-click or press Enter to finish)
+                </h3>
+                <div class="flex gap-2">
+                    <button id="btn-refresh-frame" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
+                        <i class="fas fa-rotate"></i> Refresh Frame
+                    </button>
+                    <button id="btn-undo" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
+                        <i class="fas fa-undo"></i> Undo point
+                    </button>
+                    <button id="btn-clear" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                    <button id="btn-save" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white">
+                        <i class="fas fa-save"></i> Save Zone
+                    </button>
+                </div>
+            </div>
+            <div id="canvas-host" class="flex items-center justify-center bg-slate-950 rounded-xl p-2 min-h-[360px]">
+                <div id="frame-placeholder" class="text-slate-500 text-sm text-center p-8">
+                    Select a camera above. Live stream will load here — click on the image to draw polygon points.
+                </div>
+                <div class="canvas-wrap hidden" id="canvas-wrap">
+                    <img id="frame-img" src="" alt="frame" />
+                    <canvas id="zone-canvas"></canvas>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="block text-xs text-slate-400 mb-1">Zone name (optional)</label>
+                <input id="zone-name" class="input-surface w-full text-slate-200 text-sm px-3 py-2 rounded-md" placeholder="e.g. Front of Minimart" />
+            </div>
+            <!-- Direction selector (only for wrong_way zones) -->
+            <div id="direction-panel" class="mt-3 hidden">
+                <label class="block text-xs text-slate-400 mb-2">Arah lalu lintas yang BENAR (drag panah atau klik tombol):</label>
+                <div class="flex items-center gap-3">
+                    <!-- Compass dial -->
+                    <div class="relative w-[100px] h-[100px] flex-shrink-0">
+                        <canvas id="dir-compass" width="100" height="100" class="cursor-grab active:cursor-grabbing rounded-full border border-slate-700 bg-slate-900"></canvas>
+                    </div>
+                    <!-- Quick buttons -->
+                    <div class="grid grid-cols-2 gap-1.5 flex-1" id="dir-buttons">
+                        <button data-dir="0" class="dir-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:text-purple-300 transition-all flex items-center justify-center gap-1">
+                            <i class="fas fa-arrow-right"></i> Kanan
+                        </button>
+                        <button data-dir="180" class="dir-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:text-purple-300 transition-all flex items-center justify-center gap-1">
+                            <i class="fas fa-arrow-left"></i> Kiri
+                        </button>
+                        <button data-dir="270" class="dir-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:text-purple-300 transition-all flex items-center justify-center gap-1">
+                            <i class="fas fa-arrow-up"></i> Atas
+                        </button>
+                        <button data-dir="90" class="dir-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:border-purple-500 hover:text-purple-300 transition-all flex items-center justify-center gap-1">
+                            <i class="fas fa-arrow-down"></i> Bawah
+                        </button>
+                    </div>
+                    <!-- Degree display -->
+                    <div class="text-center flex-shrink-0">
+                        <div id="dir-degree-display" class="text-2xl font-bold text-purple-400 font-mono">0°</div>
+                        <div class="text-[10px] text-slate-500">Drag dial untuk<br>sudut custom</div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-1.5">Kendaraan yang bergerak berlawanan dari arah ini akan terdeteksi sebagai pelanggaran lawan arah.</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-4">
+            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-2">
+                <i class="fas fa-layer-group text-purple-400"></i> Zones on this camera
+            </h3>
+            <div id="zones-list" class="space-y-2 text-sm text-slate-300 max-h-[520px] overflow-y-auto">
+                <div class="text-slate-500 text-xs text-center py-4">—</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Camera Modal -->
+<div id="add-cam-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[9999] backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800">
+            <div class="text-white font-semibold flex items-center gap-2"><i class="fas fa-video text-sky-400"></i> Tambah CCTV Baru</div>
+            <button onclick="document.getElementById('add-cam-modal').classList.remove('flex');document.getElementById('add-cam-modal').classList.add('hidden');" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-5 space-y-3">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Nama Lokasi</label>
+                <input id="ac-name" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="Contoh: Simpang Tugu Kujang">
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">URL Stream (RTSP/HTTP/HLS)</label>
+                <input id="ac-url" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="rtsp://... atau https://...m3u8">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Latitude</label>
+                    <input id="ac-lat" type="number" step="any" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="-6.601">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Longitude</label>
+                    <input id="ac-lng" type="number" step="any" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="106.805">
+                </div>
+            </div>
+            <div id="ac-result" class="text-xs"></div>
+            <button id="ac-submit" class="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">
+                <i class="fas fa-plus mr-1"></i> Tambah Kamera
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    let cameras = [];
+    let currentCamera = null;
+    let currentType = 'no_parking';
+    let points = [];       // in natural image coords
+    let imgNaturalW = 0, imgNaturalH = 0;
+    const wrap = document.getElementById('canvas-wrap');
+    const img = document.getElementById('frame-img');
+    const canvas = document.getElementById('zone-canvas');
+    const ctx = canvas.getContext('2d');
+
+    async function loadCameras(){
+        const r = await fetch('/api/sources');
+        cameras = await r.json();
+        const sel = document.getElementById('camera-sel');
+        sel.innerHTML = cameras.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        if (cameras.length){
+            currentCamera = cameras[0];
+            sel.value = currentCamera.id;
+            await selectCamera(currentCamera.id);
+        }
+        sel.addEventListener('change', async e => selectCamera(e.target.value));
+    }
+
+    async function selectCamera(id){
+        currentCamera = cameras.find(c => c.id === id) || null;
+        await refreshFrame();
+        await loadZones();
+        points = [];
+        draw();
+    }
+
+    async function refreshFrame(){
+        if (!currentCamera) return;
+        // Switch source to activate agent for this camera
+        try {
+            await fetch('/api/switch_source', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: currentCamera.id }) });
+        } catch(e) {}
+        // Wait a moment for agent to capture a frame
+        await new Promise(r => setTimeout(r, 500));
+        
+        document.getElementById('frame-placeholder').classList.add('hidden');
+        wrap.classList.remove('hidden');
+        
+        // Use single snapshot (not MJPEG) for accurate dimensions
+        img.onload = onFrameLoaded;
+        img.onerror = () => { setTimeout(refreshFrame, 1000); };
+        img.src = '/api/snapshot/' + currentCamera.id + '?t=' + Date.now();
+    }
+
+    function onFrameLoaded(){
+        imgNaturalW = img.naturalWidth || img.width;
+        imgNaturalH = img.naturalHeight || img.height;
+        if (imgNaturalW < 10) { setTimeout(refreshFrame, 500); return; }
+        resizeCanvas();
+        draw();
+        // Also draw existing zones on the canvas
+        drawExistingZones();
+    }
+
+    function resizeCanvas(){
+        const rect = img.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+    }
+
+    function imgCoordToCanvas(x, y){
+        const rect = img.getBoundingClientRect();
+        return [x * rect.width / (imgNaturalW||1), y * rect.height / (imgNaturalH||1)];
+    }
+    function canvasCoordToImg(cx, cy){
+        const rect = img.getBoundingClientRect();
+        return [cx * (imgNaturalW||1) / rect.width, cy * (imgNaturalH||1) / rect.height];
+    }
+
+    function draw(){
+        if (!canvas.width) return;
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        // Draw existing saved zones first (dimmed)
+        drawExistingZones();
+        // Draw current polygon being drawn
+        if (points.length === 0) return;
+        ctx.lineWidth = 2;
+        const colors = { no_parking:'#ef4444', busway:'#f97316', bicycle:'#06b6d4', bus_stop:'#10b981', wrong_way:'#a855f7' };
+        ctx.strokeStyle = colors[currentType] || '#38bdf8';
+        ctx.fillStyle = (colors[currentType] || '#38bdf8') + '33';
+        ctx.beginPath();
+        for (let i=0; i<points.length; i++){
+            const [cx, cy] = imgCoordToCanvas(points[i][0], points[i][1]);
+            if (i===0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+        }
+        if (points.length >= 3) ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // vertices
+        ctx.fillStyle = '#fff';
+        points.forEach(p => {
+            const [cx, cy] = imgCoordToCanvas(p[0], p[1]);
+            ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+        });
+        // Draw direction arrow for wrong_way zones
+        if (currentType === 'wrong_way' && points.length >= 3) {
+            // Calculate center of polygon
+            let sumX = 0, sumY = 0;
+            points.forEach(p => { const [cx, cy] = imgCoordToCanvas(p[0], p[1]); sumX += cx; sumY += cy; });
+            const centerX = sumX / points.length;
+            const centerY = sumY / points.length;
+            // Draw arrow pointing in selectedDirection
+            const angle = selectedDirection * Math.PI / 180;
+            const arrowLen = 35;
+            const endX = centerX + Math.cos(angle) * arrowLen;
+            const endY = centerY + Math.sin(angle) * arrowLen;
+            // Arrow shaft
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(centerX - Math.cos(angle) * arrowLen * 0.5, centerY - Math.sin(angle) * arrowLen * 0.5);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+            // Arrow head
+            const headLen = 12;
+            const headAngle = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - headLen * Math.cos(angle - headAngle), endY - headLen * Math.sin(angle - headAngle));
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - headLen * Math.cos(angle + headAngle), endY - headLen * Math.sin(angle + headAngle));
+            ctx.stroke();
+            // Label
+            ctx.fillStyle = '#a855f7';
+            ctx.font = 'bold 11px Inter, sans-serif';
+            ctx.fillText('ARAH BENAR →', centerX - 35, centerY - arrowLen - 5);
+        }
+    }
+
+    function drawExistingZones(){
+        if (!savedZones || savedZones.length === 0) return;
+        const colors = { no_parking:'#ef4444', busway:'#f97316', bicycle:'#06b6d4', bus_stop:'#10b981', wrong_way:'#a855f7' };
+        savedZones.forEach(z => {
+            const geom = z.geometry;
+            if (!geom || !Array.isArray(geom) || geom.length < 3) return;
+            const color = colors[z.zone_type] || '#94a3b8';
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color + '18';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            for (let i = 0; i < geom.length; i++){
+                const [cx, cy] = imgCoordToCanvas(geom[i][0], geom[i][1]);
+                if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Label
+            const [lx, ly] = imgCoordToCanvas(geom[0][0], geom[0][1]);
+            ctx.font = '11px Inter, sans-serif';
+            ctx.fillStyle = color;
+            ctx.fillText(z.name || z.zone_type, lx, ly - 4);
+        });
+    }
+
+    let savedZones = [];
+
+    canvas.addEventListener('click', e => {
+        const rect = canvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+        const [ix, iy] = canvasCoordToImg(cx, cy);
+        points.push([Math.round(ix), Math.round(iy)]);
+        draw();
+    });
+    canvas.addEventListener('dblclick', () => { if (points.length >= 3) saveZone(); });
+    window.addEventListener('keydown', e => { if (e.key === 'Enter' && points.length >= 3) saveZone(); });
+    window.addEventListener('resize', () => { resizeCanvas(); draw(); });
+
+    document.querySelectorAll('#zt-group .zone-type-pill').forEach(p => {
+        p.addEventListener('click', () => {
+            document.querySelectorAll('#zt-group .zone-type-pill').forEach(x => x.classList.remove('active'));
+            p.classList.add('active');
+            currentType = p.dataset.type;
+            // Show/hide direction panel for wrong_way zones
+            document.getElementById('direction-panel').classList.toggle('hidden', currentType !== 'wrong_way');
+            draw();
+        });
+    });
+
+    // Direction buttons & compass dial
+    let selectedDirection = 0;
+    const compassCanvas = document.getElementById('dir-compass');
+    const compassCtx = compassCanvas.getContext('2d');
+    let isDraggingCompass = false;
+
+    function drawCompass() {
+        const w = compassCanvas.width, h = compassCanvas.height;
+        const cx = w / 2, cy = h / 2, r = 38;
+        compassCtx.clearRect(0, 0, w, h);
+        
+        // Outer ring
+        compassCtx.beginPath();
+        compassCtx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+        compassCtx.strokeStyle = '#334155';
+        compassCtx.lineWidth = 2;
+        compassCtx.stroke();
+        
+        // Inner circle
+        compassCtx.beginPath();
+        compassCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        compassCtx.fillStyle = '#0f172a';
+        compassCtx.fill();
+        compassCtx.strokeStyle = '#475569';
+        compassCtx.lineWidth = 1;
+        compassCtx.stroke();
+        
+        // Cardinal marks
+        compassCtx.fillStyle = '#64748b';
+        compassCtx.font = 'bold 8px Inter, sans-serif';
+        compassCtx.textAlign = 'center';
+        compassCtx.fillText('→', cx + r - 8, cy + 3);
+        compassCtx.fillText('←', cx - r + 8, cy + 3);
+        compassCtx.fillText('↑', cx, cy - r + 12);
+        compassCtx.fillText('↓', cx, cy + r - 6);
+        
+        // Arrow pointing in selectedDirection
+        const angle = selectedDirection * Math.PI / 180;
+        const arrowLen = r - 8;
+        const endX = cx + Math.cos(angle) * arrowLen;
+        const endY = cy + Math.sin(angle) * arrowLen;
+        
+        // Arrow shaft
+        compassCtx.beginPath();
+        compassCtx.moveTo(cx, cy);
+        compassCtx.lineTo(endX, endY);
+        compassCtx.strokeStyle = '#a855f7';
+        compassCtx.lineWidth = 3;
+        compassCtx.lineCap = 'round';
+        compassCtx.stroke();
+        
+        // Arrow head
+        const headLen = 10, headAngle = 0.5;
+        compassCtx.beginPath();
+        compassCtx.moveTo(endX, endY);
+        compassCtx.lineTo(endX - headLen * Math.cos(angle - headAngle), endY - headLen * Math.sin(angle - headAngle));
+        compassCtx.lineTo(endX - headLen * Math.cos(angle + headAngle), endY - headLen * Math.sin(angle + headAngle));
+        compassCtx.closePath();
+        compassCtx.fillStyle = '#a855f7';
+        compassCtx.fill();
+        
+        // Center dot
+        compassCtx.beginPath();
+        compassCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+        compassCtx.fillStyle = '#c084fc';
+        compassCtx.fill();
+        
+        // Update degree display
+        document.getElementById('dir-degree-display').textContent = Math.round(selectedDirection) + '°';
+    }
+
+    function compassAngleFromEvent(e) {
+        const rect = compassCanvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left - compassCanvas.width / 2;
+        const my = e.clientY - rect.top - compassCanvas.height / 2;
+        let angle = Math.atan2(my, mx) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+        return Math.round(angle);
+    }
+
+    compassCanvas.addEventListener('mousedown', (e) => {
+        isDraggingCompass = true;
+        selectedDirection = compassAngleFromEvent(e);
+        drawCompass();
+        draw();
+    });
+    compassCanvas.addEventListener('mousemove', (e) => {
+        if (!isDraggingCompass) return;
+        selectedDirection = compassAngleFromEvent(e);
+        drawCompass();
+        draw();
+    });
+    window.addEventListener('mouseup', () => { isDraggingCompass = false; });
+
+    // Touch support for mobile
+    compassCanvas.addEventListener('touchstart', (e) => {
+        isDraggingCompass = true;
+        const touch = e.touches[0];
+        selectedDirection = compassAngleFromEvent(touch);
+        drawCompass(); draw();
+        e.preventDefault();
+    });
+    compassCanvas.addEventListener('touchmove', (e) => {
+        if (!isDraggingCompass) return;
+        const touch = e.touches[0];
+        selectedDirection = compassAngleFromEvent(touch);
+        drawCompass(); draw();
+        e.preventDefault();
+    });
+    compassCanvas.addEventListener('touchend', () => { isDraggingCompass = false; });
+
+    document.querySelectorAll('#dir-buttons .dir-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#dir-buttons .dir-btn').forEach(b => {
+                b.classList.remove('border-purple-500', 'bg-purple-900/30', 'text-purple-300');
+                b.classList.add('border-slate-700', 'bg-slate-800', 'text-slate-300');
+            });
+            btn.classList.remove('border-slate-700', 'bg-slate-800', 'text-slate-300');
+            btn.classList.add('border-purple-500', 'bg-purple-900/30', 'text-purple-300');
+            selectedDirection = parseInt(btn.dataset.dir);
+            drawCompass();
+            draw();
+        });
+    });
+
+    // Initial compass draw
+    drawCompass();
+
+    document.getElementById('btn-undo').addEventListener('click', () => { points.pop(); draw(); });
+    document.getElementById('btn-clear').addEventListener('click', () => { points = []; draw(); });
+    document.getElementById('btn-refresh-frame').addEventListener('click', refreshFrame);
+    document.getElementById('btn-save').addEventListener('click', saveZone);
+
+    async function saveZone(){
+        if (!currentCamera) return alert('Select a camera first');
+        if (points.length < 3) return alert('Draw at least 3 points');
+        const name = document.getElementById('zone-name').value || '';
+        // Build notes with direction for wrong_way zones
+        let notes = '';
+        if (currentType === 'wrong_way') {
+            notes = 'direction:' + selectedDirection;
+        }
+        const r = await fetch('/api/zones', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                camera_id: currentCamera.id,
+                zone_type: currentType,
+                geometry: points,
+                name,
+                notes,
+                frame_width: imgNaturalW,
+                frame_height: imgNaturalH,
+            })
+        });
+        const d = await r.json();
+        if (d.status === 'success') {
+            points = []; draw();
+            document.getElementById('zone-name').value = '';
+            await loadZones();
+        } else {
+            alert('Failed: ' + (d.message||'unknown'));
+        }
+    }
+
+    async function loadZones(){
+        if (!currentCamera) return;
+        const r = await fetch('/api/zones?camera_id=' + encodeURIComponent(currentCamera.id));
+        const d = await r.json();
+        const list = document.getElementById('zones-list');
+        const zs = (d.zones||[]);
+        savedZones = zs;  // Store for canvas drawing
+        draw();  // Redraw canvas with existing zones
+        if (zs.length === 0){
+            list.innerHTML = '<div class="text-slate-500 text-xs text-center py-4">No zones defined for this camera yet.</div>';
+            return;
+        }
+        list.innerHTML = zs.map(z => {
+            const cls = 'zt-' + (z.zone_type||'no_parking');
+            return `<div class="mini-card flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="zone-type-pill ${cls}">${(z.zone_type||'').replace('_',' ')}</span>
+                        <span class="text-white text-sm truncate">${z.name || 'Zone #' + z.id}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">${z.active ? 'Active' : 'Inactive'} · ${new Date(((z.created_ts||0)*1000)).toLocaleString()}</div>
+                </div>
+                <div class="flex gap-1.5">
+                    <button data-id="${z.id}" data-act="toggle" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs text-white"><i class="fas fa-power-off"></i></button>
+                    <button data-id="${z.id}" data-act="delete" class="px-2 py-1 rounded bg-red-700 hover:bg-red-600 text-xs text-white"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>`;
+        }).join('');
+        list.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+            const id = b.dataset.id, act = b.dataset.act;
+            if (act === 'delete'){
+                if (!confirm('Delete zone?')) return;
+                await fetch('/api/zones/' + id, { method:'DELETE' });
+            } else if (act === 'toggle'){
+                const z = zs.find(x => String(x.id) === String(id));
+                await fetch('/api/zones/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !z.active }) });
+            }
+            loadZones();
+        }));
+    }
+
+    loadCameras();
+
+    // Delete camera handler
+    document.getElementById('btn-delete-cam').addEventListener('click', async function(){
+        if (!currentCamera) return;
+        if (!confirm(`Hapus kamera "${currentCamera.name}"? Semua zona di kamera ini juga akan terhapus.`)) return;
+        const r = await fetch('/api/delete_camera', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ id: currentCamera.id })
+        });
+        const d = await r.json();
+        if (d.status === 'success'){
+            alert('Kamera berhasil dihapus');
+            loadCameras();
+        } else {
+            alert('Gagal: ' + (d.message||'unknown'));
+        }
+    });
+
+    // Add camera handler
+    document.getElementById('ac-submit').addEventListener('click', async function(){
+        const name = document.getElementById('ac-name').value.trim();
+        const url = document.getElementById('ac-url').value.trim();
+        const lat = document.getElementById('ac-lat').value;
+        const lng = document.getElementById('ac-lng').value;
+        const res = document.getElementById('ac-result');
+        if (!name || !url) { res.innerHTML = '<span class="text-red-400">Nama dan URL wajib diisi</span>'; return; }
+        const r = await fetch('/api/add_camera', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ name, url, lat: lat||null, lng: lng||null })
+        });
+        const d = await r.json();
+        if (d.status === 'success'){
+            res.innerHTML = '<span class="text-emerald-400">✓ Kamera berhasil ditambahkan!</span>';
+            setTimeout(() => {
+                document.getElementById('add-cam-modal').classList.remove('flex');
+                document.getElementById('add-cam-modal').classList.add('hidden');
+                res.innerHTML = '';
+                loadCameras();
+            }, 1000);
+        } else {
+            res.innerHTML = '<span class="text-red-400">' + (d.message||'Gagal') + '</span>';
+        }
+    });
+})();
+</script>
+{% endblock %}

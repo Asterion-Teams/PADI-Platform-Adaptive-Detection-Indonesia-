@@ -1,0 +1,674 @@
+{% extends "base.html" %}
+{% block title %}PADI - Settings{% endblock %}
+{% block header_kicker %}System{% endblock %}
+{% block header_title %}Settings & Configuration{% endblock %}
+{% block header_actions %}
+    <button id="btn-save" class="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all border border-emerald-500">
+        <i class="fas fa-save"></i>
+        <span>Simpan</span>
+    </button>
+    <button id="btn-restart" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-amber-500/40">
+        <i class="fas fa-rotate text-amber-300"></i>
+        <span>Restart Agents</span>
+    </button>
+{% endblock %}
+{% block style_extra %}
+<style>
+    .setting-card { background: rgba(15,23,42,0.58); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.07); border-radius: 1rem; padding: 1.25rem; }
+    .setting-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem; display: block; }
+    .setting-desc { font-size: 0.7rem; color: #64748b; margin-top: 0.2rem; }
+    .input-field { background: rgba(2,6,23,0.55); border: 1px solid rgba(255,255,255,0.10); color: #e2e8f0; padding: 0.5rem 0.75rem; border-radius: 0.5rem; width: 100%; font-size: 0.875rem; transition: all 0.2s; }
+    .input-field:focus { outline: none; border-color: rgba(56,189,248,0.45); box-shadow: 0 0 0 3px rgba(56,189,248,0.12); }
+    .toggle { position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: all 0.3s; flex-shrink: 0; }
+    .toggle.on { background: #10b981; }
+    .toggle.off { background: #475569; }
+    .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: white; transition: all 0.3s; }
+    .toggle.on::after { transform: translateX(20px); }
+    .model-card { border: 1px solid rgba(255,255,255,0.07); border-radius: 0.75rem; padding: 0.75rem 1rem; cursor: pointer; transition: all 0.2s; }
+    .model-card:hover { border-color: rgba(56,189,248,0.3); background: rgba(56,189,248,0.05); }
+    .model-card.active { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.08); }
+    .section-title { font-size: 0.85rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .toast-bar { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 9999; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+
+    <!-- System Status -->
+    <div class="glass-panel p-3 flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-sm text-slate-300" id="sys-status">System Online</span>
+        </div>
+        <div class="flex items-center gap-4 ml-auto text-xs text-slate-500">
+            <span id="sys-gpu">—</span>
+            <span id="sys-model">—</span>
+            <span id="sys-agents">—</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        <!-- AI Model -->
+        <div class="setting-card lg:col-span-2">
+            <h3 class="section-title"><i class="fas fa-brain text-purple-400"></i> AI Model <span class="ml-auto text-xs text-slate-500 font-normal" id="current-model-label">—</span></h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="model-grid"></div>
+            <p class="setting-desc mt-3">Klik model untuk switch. Hot-swap tanpa restart server.</p>
+        </div>
+
+        <!-- Detection Parameters -->
+        <div class="setting-card">
+            <h3 class="section-title"><i class="fas fa-crosshairs text-sky-400"></i> Deteksi</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="setting-label">Confidence Threshold</label>
+                    <input type="range" min="0.05" max="0.95" step="0.05" id="s-conf" class="w-full accent-sky-500">
+                    <div class="flex justify-between text-xs text-slate-500"><span>0.05</span><span id="v-conf">—</span><span>0.95</span></div>
+                    <p class="setting-desc">Minimum confidence untuk deteksi kendaraan.</p>
+                </div>
+                <div>
+                    <label class="setting-label">IoU Threshold (NMS)</label>
+                    <input type="range" min="0.1" max="0.9" step="0.05" id="s-iou" class="w-full accent-sky-500">
+                    <div class="flex justify-between text-xs text-slate-500"><span>0.1</span><span id="v-iou">—</span><span>0.9</span></div>
+                </div>
+                <div>
+                    <label class="setting-label">Inference Image Size</label>
+                    <select id="s-imgsz" class="input-field">
+                        <option value="320">320px (fastest)</option>
+                        <option value="480">480px</option>
+                        <option value="640">640px (recommended)</option>
+                        <option value="960">960px</option>
+                        <option value="1280">1280px (highest)</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="setting-label">Stream FPS</label>
+                        <input type="number" min="1" max="60" id="s-fps" class="input-field">
+                    </div>
+                    <div>
+                        <label class="setting-label">JPEG Quality</label>
+                        <input type="number" min="30" max="95" id="s-jpeg" class="input-field">
+                    </div>
+                </div>
+                <div>
+                    <label class="setting-label">Timezone</label>
+                    <select id="s-timezone" class="input-field">
+                        <option value="Asia/Jakarta">WIB (Asia/Jakarta)</option>
+                        <option value="Asia/Makassar">WITA (Asia/Makassar)</option>
+                        <option value="Asia/Jayapura">WIT (Asia/Jayapura)</option>
+                        <option value="UTC">UTC</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enforcement Settings -->
+        <div class="setting-card">
+            <h3 class="section-title"><i class="fas fa-shield-halved text-red-400"></i> Enforcement (E-TLE)</h3>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <div><div class="text-sm text-slate-200">Violation Detection</div><p class="setting-desc">Master switch enforcement engine</p></div>
+                    <div id="t-violations" class="toggle on"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div><div class="text-sm text-slate-200">ANPR (Plate Recognition)</div><p class="setting-desc">Baca plat nomor pelanggar</p></div>
+                    <div id="t-anpr" class="toggle on"></div>
+                </div>
+                <hr class="border-slate-800">
+                <div>
+                    <label class="setting-label">Parking Threshold (detik)</label>
+                    <input type="number" min="10" max="300" step="5" id="s-parking-sec" class="input-field">
+                    <p class="setting-desc">Kendaraan harus diam selama ini sebelum dianggap pelanggaran.</p>
+                </div>
+                <div>
+                    <label class="setting-label">Dynamic Lane Threshold (detik)</label>
+                    <input type="number" min="1" max="30" step="1" id="s-lane-sec" class="input-field">
+                    <p class="setting-desc">Threshold untuk busway/jalur sepeda.</p>
+                </div>
+                <div>
+                    <label class="setting-label">Violation Cooldown (detik)</label>
+                    <input type="number" min="10" max="600" step="10" id="s-cooldown" class="input-field">
+                    <p class="setting-desc">Jeda sebelum kendaraan sama bisa dicatat ulang.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- News/Social Media Monitor -->
+        <div class="setting-card lg:col-span-2">
+            <h3 class="section-title"><i class="fas fa-newspaper text-amber-400"></i> Monitor Berita Lalu Lintas</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="setting-label">Keyword Pencarian Berita</label>
+                    <input id="s-news-query" class="input-field" placeholder="macet OR kemacetan OR lalu lintas jakarta">
+                    <p class="setting-desc">Keyword untuk mencari berita terkait lalu lintas. Gunakan OR untuk multiple terms.</p>
+                </div>
+                <button id="btn-test-news" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold rounded-lg">
+                    <i class="fas fa-search mr-1"></i> Test Pencarian
+                </button>
+                <div id="news-preview" class="mt-3 rounded-lg border border-slate-800 p-3 hidden max-h-[250px] overflow-y-auto">
+                    <p class="text-xs text-slate-400">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- X.com / CRM Social Scraper -->
+        <div class="setting-card lg:col-span-2">
+            <h3 class="section-title"><i class="fab fa-x-twitter text-slate-300"></i> CRM — X.com Social Media Scraper</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="setting-label">Search Query (Hashtag / Mention)</label>
+                    <input id="s-x-query" class="input-field" placeholder="@DishubDKI OR #DishubDKI OR to:DishubDKI">
+                    <p class="setting-desc">Query pencarian di X.com. Gunakan OR untuk multiple terms. Contoh: @DishubDKI OR #macetjakarta OR to:DishubDKI</p>
+                </div>
+                <div>
+                    <label class="setting-label">X.com Session Cookies (JSON)</label>
+                    <textarea id="s-x-cookies" rows="4" class="input-field font-mono text-xs" placeholder='[{"name":"auth_token","value":"xxx","domain":".x.com",...}]'></textarea>
+                    <p class="setting-desc">Export cookies dari browser (gunakan extension EditThisCookie). Diperlukan agar Playwright bisa login ke X.com.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="x-cookies-status" class="text-xs text-slate-500">—</span>
+                    <button id="btn-test-x" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">
+                        <i class="fab fa-x-twitter mr-1"></i> Test Scrape
+                    </button>
+                </div>
+                <div id="x-preview" class="mt-2 rounded-lg border border-slate-800 p-3 hidden max-h-[200px] overflow-y-auto">
+                    <p class="text-xs text-slate-400">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hikvision ISAPI Integration -->
+        <div class="setting-card lg:col-span-2">
+            <h3 class="section-title"><i class="fas fa-camera-cctv text-cyan-400"></i> Hikvision ISAPI Integration</h3>
+            <p class="setting-desc mb-4">Koneksi langsung ke kamera Hikvision via ISAPI untuk snapshot resolusi tinggi dan informasi perangkat.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-3">
+                    <div>
+                        <label class="setting-label">IP Address / Hostname</label>
+                        <input id="hik-host" class="input-field" placeholder="192.168.1.100">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="setting-label">Username</label>
+                            <input id="hik-user" class="input-field" value="admin">
+                        </div>
+                        <div>
+                            <label class="setting-label">Password</label>
+                            <input id="hik-pass" type="password" class="input-field" placeholder="••••••">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="setting-label">Port</label>
+                            <input id="hik-port" type="number" class="input-field" value="80">
+                        </div>
+                        <div>
+                            <label class="setting-label">Channel</label>
+                            <input id="hik-channel" type="number" class="input-field" value="1" min="1" max="32">
+                        </div>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button id="btn-hik-test" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg">
+                            <i class="fas fa-plug mr-1"></i> Test Koneksi
+                        </button>
+                        <button id="btn-hik-snapshot" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-lg">
+                            <i class="fas fa-camera mr-1"></i> Snapshot
+                        </button>
+                        <button id="btn-hik-anpr" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-lg">
+                            <i class="fas fa-id-card mr-1"></i> ANPR
+                        </button>
+                        <button id="btn-hik-add" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">
+                            <i class="fas fa-plus mr-1"></i> Tambah
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Result Panel -->
+                <div>
+                    <div id="hik-result" class="rounded-lg border border-slate-800 p-4 min-h-[200px] flex items-center justify-center">
+                        <p class="text-xs text-slate-500 text-center"><i class="fas fa-camera-cctv text-2xl text-slate-700 block mb-2"></i>Klik "Test Koneksi" untuk memulai</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Snapshot Preview -->
+            <div id="hik-snapshot-area" class="mt-4 hidden">
+                <h4 class="text-sm text-white font-semibold mb-2"><i class="fas fa-image text-purple-400 mr-1"></i> Snapshot Preview (Full Resolution)</h4>
+                <div class="rounded-lg border border-slate-800 overflow-hidden bg-black">
+                    <img id="hik-snapshot-img" class="w-full max-h-[400px] object-contain" />
+                </div>
+                <p class="setting-desc mt-1">Resolusi penuh dari ISAPI — lebih baik untuk ANPR dibanding RTSP stream.</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-bar hidden" id="toast">
+    <div class="px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-semibold">
+        <i class="fas fa-check-circle"></i>
+        <span id="toast-msg">Saved</span>
+    </div>
+</div>
+
+<script>
+(function(){
+    let settings = {};
+
+    function showToast(msg, isError){
+        const t = document.getElementById('toast');
+        const m = document.getElementById('toast-msg');
+        m.textContent = msg;
+        t.querySelector('div').className = (isError
+            ? 'bg-red-600 text-white'
+            : 'bg-emerald-600 text-white') + ' px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-semibold';
+        t.classList.remove('hidden');
+        setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    async function loadSettings(){
+        try {
+            const r = await fetch('/api/settings');
+            const d = await r.json();
+            if (d.status !== 'success') return;
+            settings = d.settings;
+            render();
+        } catch(e) {
+            console.error('Failed to load settings:', e);
+        }
+    }
+
+    function render(){
+        const det = settings.detection || {};
+        const enf = settings.enforcement || {};
+        const mdl = settings.model || {};
+        const srv = settings.server || {};
+        const gpu = settings.gpu;
+
+        document.getElementById('sys-gpu').textContent = gpu ? `GPU: ${gpu.name}` : 'CPU mode';
+        document.getElementById('sys-model').textContent = `Model: ${mdl.active_model || 'none'}`;
+        document.getElementById('sys-agents').textContent = `Agents: ${srv.agents_running}/${srv.cameras_count}`;
+        document.getElementById('current-model-label').textContent = mdl.active_model || '—';
+
+        // Models — render first to ensure visibility
+        const grid = document.getElementById('model-grid');
+        const models = mdl.available_models || [];
+        if (models.length === 0) {
+            grid.innerHTML = '<p class="text-xs text-slate-500 col-span-3">Tidak ada model ditemukan di folder models/</p>';
+        } else {
+            grid.innerHTML = models.map(m => {
+                const isActive = m.name === mdl.active_model;
+                const isCustom = m.name.includes('vehicle_v3') || m.name.includes('custom');
+                const icon = isCustom ? 'fa-star text-amber-400' : 'fa-cube text-slate-400';
+                return `<div class="model-card ${isActive ? 'active' : ''}" data-model="${m.name}">
+                    <div class="flex items-center gap-2">
+                        <i class="fas ${icon}"></i>
+                        <span class="text-sm text-white font-semibold">${m.name}</span>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">${m.size_mb} MB${isActive ? ' · <span class="text-emerald-400 font-semibold">ACTIVE</span>' : ''}</div>
+                </div>`;
+            }).join('');
+            grid.querySelectorAll('.model-card').forEach(card => {
+                card.addEventListener('click', () => switchModel(card.dataset.model));
+            });
+        }
+
+        const conf = document.getElementById('s-conf');
+        conf.value = det.conf_threshold || 0.35;
+        document.getElementById('v-conf').textContent = parseFloat(conf.value).toFixed(2);
+        conf.oninput = () => document.getElementById('v-conf').textContent = parseFloat(conf.value).toFixed(2);
+
+        const iou = document.getElementById('s-iou');
+        iou.value = det.iou_threshold || 0.5;
+        document.getElementById('v-iou').textContent = parseFloat(iou.value).toFixed(2);
+        iou.oninput = () => document.getElementById('v-iou').textContent = parseFloat(iou.value).toFixed(2);
+
+        document.getElementById('s-imgsz').value = det.infer_imgsz || 640;
+        document.getElementById('s-fps').value = det.stream_fps || 30;
+        document.getElementById('s-jpeg').value = det.stream_jpeg_quality || 75;
+
+        setToggle('t-violations', enf.violations_enabled);
+        setToggle('t-anpr', enf.anpr_enabled);
+        document.getElementById('s-parking-sec').value = enf.illegal_parking_min_seconds || 60;
+        document.getElementById('s-lane-sec').value = enf.dynamic_lane_min_seconds || 2;
+        document.getElementById('s-cooldown').value = enf.violation_cooldown_seconds || 120;
+
+        // News query from server settings
+        const social = settings.social_media || {};
+        document.getElementById('s-news-query').value = social.search_query || 'macet OR kemacetan OR lalu lintas jakarta';
+
+        // X.com settings
+        document.getElementById('s-x-query').value = social.x_search_query || '@DishubDKI OR #DishubDKI OR to:DishubDKI';
+        const xStatus = document.getElementById('x-cookies-status');
+        if (social.x_cookies_loaded) {
+            xStatus.innerHTML = '<i class="fas fa-check-circle text-emerald-400 mr-1"></i> Cookies loaded';
+            xStatus.className = 'text-xs text-emerald-400';
+        } else {
+            xStatus.innerHTML = '<i class="fas fa-exclamation-circle text-amber-400 mr-1"></i> No cookies — paste cookies JSON below';
+            xStatus.className = 'text-xs text-amber-400';
+        }
+
+        // Timezone from server settings
+        const general = settings.general || {};
+        if (general.timezone && document.getElementById('s-timezone')) {
+            document.getElementById('s-timezone').value = general.timezone;
+        }
+
+    }
+
+    function setToggle(id, val){ const el = document.getElementById(id); el.classList.toggle('on', !!val); el.classList.toggle('off', !val); }
+    function getToggle(id){ return document.getElementById(id).classList.contains('on'); }
+    document.querySelectorAll('.toggle').forEach(t => { t.addEventListener('click', () => { t.classList.toggle('on'); t.classList.toggle('off'); }); });
+
+    async function switchModel(name){
+        showToast('Switching model...', false);
+        const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ model: { active_model: name } }) });
+        const d = await r.json();
+        if (d.status === 'success'){ showToast(`Model: ${name}`, false); loadSettings(); }
+        else showToast(d.message || 'Failed', true);
+    }
+
+    document.getElementById('btn-save').addEventListener('click', async () => {
+        const payload = {
+            detection: {
+                conf_threshold: parseFloat(document.getElementById('s-conf').value),
+                iou_threshold: parseFloat(document.getElementById('s-iou').value),
+                infer_imgsz: parseInt(document.getElementById('s-imgsz').value),
+                stream_fps: parseFloat(document.getElementById('s-fps').value),
+                stream_jpeg_quality: parseInt(document.getElementById('s-jpeg').value),
+            },
+            enforcement: {
+                violations_enabled: getToggle('t-violations'),
+                anpr_enabled: getToggle('t-anpr'),
+                illegal_parking_min_seconds: parseFloat(document.getElementById('s-parking-sec').value),
+                dynamic_lane_min_seconds: parseFloat(document.getElementById('s-lane-sec').value),
+                violation_cooldown_seconds: parseFloat(document.getElementById('s-cooldown').value),
+            },
+            social_media: {
+                search_query: document.getElementById('s-news-query').value.trim(),
+                x_search_query: document.getElementById('s-x-query').value.trim(),
+                x_cookies_json: document.getElementById('s-x-cookies').value.trim() || undefined,
+            },
+            general: {
+                timezone: document.getElementById('s-timezone') ? document.getElementById('s-timezone').value : undefined,
+            }
+        };
+        const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const d = await r.json();
+        if (d.status === 'success') showToast('Settings disimpan! (persist setelah restart)', false);
+        else showToast(d.message || 'Error', true);
+    });
+
+    document.getElementById('btn-restart').addEventListener('click', async () => {
+        if (!confirm('Restart semua camera agents? Stream akan terputus sebentar.')) return;
+        const r = await fetch('/api/settings/restart_agents', { method: 'POST' });
+        const d = await r.json();
+        showToast(`Agents restarted (${d.agents_running || 0} running)`, false);
+        loadSettings();
+    });
+
+    document.getElementById('btn-test-news').addEventListener('click', async () => {
+        const q = document.getElementById('s-news-query').value.trim();
+        if (!q) { showToast('Keyword wajib diisi', true); return; }
+        const preview = document.getElementById('news-preview');
+        preview.classList.remove('hidden');
+        preview.innerHTML = '<p class="text-xs text-slate-400">Mencari...</p>';
+        try {
+            const r = await fetch('/api/twitter/search?q=' + encodeURIComponent(q));
+            const d = await r.json();
+            if (d.status === 'success' && d.tweets && d.tweets.length) {
+                preview.innerHTML = d.tweets.slice(0, 5).map(t => `<div class="py-2 border-b border-slate-800 last:border-0">
+                    <p class="text-xs text-white font-medium">${t.text}</p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">${t.author_name} · ${t.created_at || ''}</p>
+                </div>`).join('');
+                showToast(`${d.count} berita ditemukan`, false);
+            } else {
+                preview.innerHTML = '<p class="text-xs text-slate-500">Tidak ada hasil.</p>';
+            }
+        } catch(e) {
+            preview.innerHTML = `<p class="text-xs text-red-400">${e.message}</p>`;
+        }
+    });
+
+    document.getElementById('btn-test-x').addEventListener('click', async () => {
+        const preview = document.getElementById('x-preview');
+        preview.classList.remove('hidden');
+        preview.innerHTML = '<p class="text-xs text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i> Scraping X.com (bisa 10-20 detik)...</p>';
+        try {
+            const r = await fetch('/api/crm/social_mentions');
+            const d = await r.json();
+            if (d.status === 'success' && d.mentions && d.mentions.length) {
+                const xOnly = d.mentions.filter(m => m.platform === 'twitter');
+                if (xOnly.length) {
+                    preview.innerHTML = xOnly.slice(0, 5).map(m => `<div class="py-2 border-b border-slate-800 last:border-0">
+                        <p class="text-xs text-white font-medium">${m.title}</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">${m.source} · ${m.platform}</p>
+                    </div>`).join('');
+                    showToast(`${xOnly.length} tweets dari X.com`, false);
+                } else {
+                    preview.innerHTML = '<p class="text-xs text-amber-400">Scraper berjalan tapi tidak ada tweet relevan. Coba ubah query.</p>';
+                }
+            } else {
+                preview.innerHTML = '<p class="text-xs text-red-400">Gagal scrape. Pastikan cookies valid dan belum expired.</p>';
+            }
+        } catch(e) {
+            preview.innerHTML = `<p class="text-xs text-red-400">${e.message}</p>`;
+        }
+    });
+
+    // ---- Hikvision ISAPI ----
+    function getHikParams() {
+        return {
+            host: document.getElementById('hik-host').value.trim(),
+            username: document.getElementById('hik-user').value.trim() || 'admin',
+            password: document.getElementById('hik-pass').value,
+            port: parseInt(document.getElementById('hik-port').value) || 80,
+            channel: parseInt(document.getElementById('hik-channel').value) || 1,
+        };
+    }
+
+    document.getElementById('btn-hik-test').addEventListener('click', async () => {
+        const params = getHikParams();
+        if (!params.host) { showToast('IP Address wajib diisi', true); return; }
+        const resultDiv = document.getElementById('hik-result');
+        resultDiv.innerHTML = '<p class="text-xs text-slate-400 text-center"><i class="fas fa-spinner fa-spin mr-1"></i> Menghubungkan...</p>';
+        try {
+            const r = await fetch('/api/hikvision/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            });
+            const d = await r.json();
+            if (d.status === 'success') {
+                const dev = d.device || {};
+                resultDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+                            <span class="text-sm text-emerald-400 font-semibold">Terhubung</span>
+                        </div>
+                        <div class="text-xs space-y-1 text-slate-300">
+                            <div><span class="text-slate-500">Device:</span> ${dev.device_name || '-'}</div>
+                            <div><span class="text-slate-500">Model:</span> ${dev.model || '-'}</div>
+                            <div><span class="text-slate-500">Serial:</span> <span class="font-mono">${dev.serial_number || '-'}</span></div>
+                            <div><span class="text-slate-500">Firmware:</span> ${dev.firmware || '-'}</div>
+                            <div><span class="text-slate-500">MAC:</span> <span class="font-mono">${dev.mac_address || '-'}</span></div>
+                        </div>
+                        ${d.rtsp_urls ? `<div class="mt-3 pt-2 border-t border-slate-800">
+                            <div class="text-xs text-slate-500 mb-1">RTSP URLs:</div>
+                            <div class="text-[10px] font-mono text-cyan-300 break-all">${d.rtsp_urls.mainstream}</div>
+                            <div class="text-[10px] font-mono text-slate-400 break-all mt-0.5">${d.rtsp_urls.substream}</div>
+                        </div>` : ''}
+                    </div>`;
+                showToast('Koneksi berhasil!', false);
+            } else {
+                resultDiv.innerHTML = `<div class="text-center"><i class="fas fa-times-circle text-red-400 text-2xl mb-2 block"></i><p class="text-xs text-red-300">${d.message || 'Gagal terhubung'}</p></div>`;
+                showToast('Koneksi gagal', true);
+            }
+        } catch(e) {
+            resultDiv.innerHTML = `<div class="text-center"><i class="fas fa-times-circle text-red-400 text-2xl mb-2 block"></i><p class="text-xs text-red-300">${e.message}</p></div>`;
+            showToast('Error: ' + e.message, true);
+        }
+    });
+
+    document.getElementById('btn-hik-snapshot').addEventListener('click', async () => {
+        const params = getHikParams();
+        if (!params.host) { showToast('IP Address wajib diisi', true); return; }
+        showToast('Mengambil snapshot...', false);
+        try {
+            const r = await fetch('/api/hikvision/snapshot', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            });
+            if (r.ok && r.headers.get('content-type')?.includes('image')) {
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                document.getElementById('hik-snapshot-img').src = url;
+                document.getElementById('hik-snapshot-area').classList.remove('hidden');
+                showToast('Snapshot berhasil!', false);
+            } else {
+                const d = await r.json().catch(() => ({}));
+                showToast(d.message || 'Gagal ambil snapshot', true);
+            }
+        } catch(e) {
+            showToast('Error: ' + e.message, true);
+        }
+    });
+
+    document.getElementById('btn-hik-add').addEventListener('click', async () => {
+        const params = getHikParams();
+        if (!params.host) { showToast('IP Address wajib diisi', true); return; }
+        // Build RTSP URL and add as camera source
+        const rtspUrl = `rtsp://${params.username}:${params.password}@${params.host}:554/Streaming/Channels/${params.channel}01`;
+        const camName = prompt('Nama kamera:', `Hikvision ${params.host}`);
+        if (!camName) return;
+        try {
+            const r = await fetch('/api/add_source', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name: camName, url: rtspUrl })
+            });
+            const d = await r.json();
+            if (d.status === 'success') {
+                showToast(`Kamera "${camName}" ditambahkan!`, false);
+            } else {
+                showToast(d.message || 'Gagal menambahkan', true);
+            }
+        } catch(e) {
+            showToast('Error: ' + e.message, true);
+        }
+    });
+
+    // ---- Hikvision ANPR ----
+    document.getElementById('btn-hik-anpr').addEventListener('click', async () => {
+        const params = getHikParams();
+        if (!params.host) { showToast('IP Address wajib diisi', true); return; }
+        const resultDiv = document.getElementById('hik-result');
+        resultDiv.innerHTML = '<p class="text-xs text-slate-400 text-center"><i class="fas fa-spinner fa-spin mr-1"></i> Memeriksa ANPR...</p>';
+
+        try {
+            // Step 1: Check if camera supports ANPR
+            const checkR = await fetch('/api/hikvision/anpr/check', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            });
+            const checkD = await checkR.json();
+
+            if (checkD.status === 'success' && checkD.anpr_supported) {
+                // Camera supports ANPR — try to trigger recognition
+                resultDiv.innerHTML = '<p class="text-xs text-slate-400 text-center"><i class="fas fa-spinner fa-spin mr-1"></i> ANPR didukung! Membaca plat...</p>';
+
+                const triggerR = await fetch('/api/hikvision/anpr/trigger', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(params)
+                });
+                const triggerD = await triggerR.json();
+
+                if (triggerD.status === 'success' && triggerD.result) {
+                    const p = triggerD.result;
+                    resultDiv.innerHTML = `
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+                                <span class="text-sm text-emerald-400 font-semibold">ANPR Aktif</span>
+                            </div>
+                            <div class="bg-slate-900 rounded-lg p-3 border border-slate-700 text-center">
+                                <div class="text-xs text-slate-500 mb-1">Plat Terdeteksi</div>
+                                <div class="text-2xl font-bold font-mono text-white tracking-wider">${p.plate}</div>
+                                <div class="text-xs text-slate-400 mt-1">Confidence: ${(p.confidence*100).toFixed(1)}%</div>
+                            </div>
+                            <div class="text-xs space-y-1 text-slate-400 mt-2">
+                                ${p.plate_color ? `<div><span class="text-slate-500">Warna plat:</span> ${p.plate_color}</div>` : ''}
+                                ${p.vehicle_color ? `<div><span class="text-slate-500">Warna kendaraan:</span> ${p.vehicle_color}</div>` : ''}
+                                ${p.vehicle_type ? `<div><span class="text-slate-500">Tipe:</span> ${p.vehicle_type}</div>` : ''}
+                                ${p.direction ? `<div><span class="text-slate-500">Arah:</span> ${p.direction}</div>` : ''}
+                            </div>
+                        </div>`;
+                    showToast(`Plat terbaca: ${p.plate}`, false);
+                } else {
+                    // ANPR supported but no plate visible now — try get recent plates
+                    const platesR = await fetch('/api/hikvision/anpr/plates', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({...params, max_results: 10})
+                    });
+                    const platesD = await platesR.json();
+
+                    if (platesD.status === 'success' && platesD.plates && platesD.plates.length > 0) {
+                        const rows = platesD.plates.map(p => `
+                            <tr class="border-t border-slate-800">
+                                <td class="py-1.5 px-2 font-mono font-bold text-white">${p.plate}</td>
+                                <td class="py-1.5 px-2 text-slate-400">${(p.confidence*100).toFixed(0)}%</td>
+                                <td class="py-1.5 px-2 text-slate-500 text-[10px]">${p.timestamp || '-'}</td>
+                            </tr>`).join('');
+                        resultDiv.innerHTML = `
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+                                    <span class="text-sm text-emerald-400 font-semibold">ANPR Aktif</span>
+                                </div>
+                                <p class="text-xs text-slate-400">Tidak ada plat terlihat saat ini. Berikut plat terakhir yang terdeteksi:</p>
+                                <table class="w-full text-xs">
+                                    <thead class="text-slate-500"><tr><th class="text-left py-1 px-2">Plat</th><th class="text-left py-1 px-2">Conf</th><th class="text-left py-1 px-2">Waktu</th></tr></thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>`;
+                        showToast(`${platesD.count} plat ditemukan dari history`, false);
+                    } else {
+                        resultDiv.innerHTML = `
+                            <div class="text-center">
+                                <i class="fas fa-check-circle text-emerald-400 text-2xl mb-2 block"></i>
+                                <p class="text-sm text-emerald-300 font-semibold">ANPR Didukung</p>
+                                <p class="text-xs text-slate-400 mt-1">Tidak ada plat terdeteksi saat ini. Pastikan ada kendaraan di depan kamera.</p>
+                            </div>`;
+                        showToast('ANPR aktif, belum ada plat terdeteksi', false);
+                    }
+                }
+            } else {
+                // Camera does NOT support ANPR
+                resultDiv.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-info-circle text-amber-400 text-2xl mb-2 block"></i>
+                        <p class="text-sm text-amber-300 font-semibold">ANPR Tidak Tersedia di Kamera</p>
+                        <p class="text-xs text-slate-400 mt-2">Kamera ini bukan seri DeepinView/iDS yang memiliki ANPR built-in.</p>
+                        <p class="text-xs text-slate-400 mt-1">Sistem akan menggunakan <strong class="text-white">OCR server-side</strong> (EasyOCR / PaddleOCR) untuk membaca plat dari frame CCTV.</p>
+                    </div>`;
+                showToast('Kamera tidak support ANPR built-in', false);
+            }
+        } catch(e) {
+            resultDiv.innerHTML = `<div class="text-center"><i class="fas fa-times-circle text-red-400 text-2xl mb-2 block"></i><p class="text-xs text-red-300">${e.message}</p></div>`;
+            showToast('Error: ' + e.message, true);
+        }
+    });
+
+    loadSettings();
+})();
+</script>
+{% endblock %}
