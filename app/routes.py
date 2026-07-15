@@ -16,7 +16,10 @@ import urllib.parse
 from app.config import DATA_DIR, CONFIG_FILE, HISTORY_MAX_LEN
 from app.globals import CCTV_SOURCES
 from app.services.camera import generate_frames, CameraAgent
-from app.auth import admin_required
+from app.auth import admin_required, login_required
+from app.csrf import csrf_required
+from app.ratelimit import rate_limit
+from app.validators import safe_camera_id, safe_string
 from app.database import (
     predict_future_traffic,
     get_history_range,
@@ -590,7 +593,11 @@ def _live_camera_snapshot():
 
 @bp.route("/login", methods=["GET", "POST"])
 def login_page():
-    from app.auth import check_login
+    from app.auth import check_login, ensure_demo_user_session, is_demo_auth_bypass
+    if is_demo_auth_bypass():
+        user = ensure_demo_user_session() or {"role": "admin"}
+        return redirect("/dashboard" if user.get("role") == "admin" else "/operator")
+
     if request.method == "GET":
         if session.get("user"):
             role = session["user"].get("role")
@@ -622,6 +629,12 @@ def operator_page():
     return render_template("operator.html")
 
 
+@bp.route("/livemap")
+def livemap_page():
+    """Live map showing all registered CCTV cameras with real-time density."""
+    return render_template("livemap.html")
+
+
 @bp.route("/ocr-test")
 def ocr_test_page():
     return render_template("ocr_test.html")
@@ -629,12 +642,12 @@ def ocr_test_page():
 
 @bp.route("/")
 def index():
-    return redirect("/operator")
+    return render_template("index.html")
 
 @bp.route("/dashboard")
 def dashboard():
-    from app.auth import admin_required as _ar
-    user = session.get("user")
+    from app.auth import get_current_user
+    user = get_current_user()
     if not user or user.get("role") != "admin":
         return redirect("/login")
     return render_template("dashboard.html")
@@ -676,17 +689,20 @@ def get_sources():
 
 @bp.route("/api/add_camera", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_add")
 def add_camera():
     try:
         data = request.json or {}
 
-        name = (data.get("name") or "").strip()
-        url = (data.get("url") or "").strip()
+        name = str(data.get("name") or "").strip()
+        url = str(data.get("url") or "").strip()
         if not name or not url:
             return jsonify({"status": "error", "message": "Missing name or url"}), 400
 
-        lat_raw = (data.get("lat") or "").strip()
-        lng_raw = (data.get("lng") or "").strip()
+        lat_raw = str(data.get("lat") or "").strip()
+        lng_raw = str(data.get("lng") or "").strip()
+        external_id = str(data.get("external_id") or "").strip()
         try:
             lat = float(lat_raw) if lat_raw else None
             lng = float(lng_raw) if lng_raw else None
@@ -699,7 +715,10 @@ def add_camera():
         while new_id in existing_ids:
             new_id = f"cam_{uuid.uuid4().hex[:10]}"
 
-        cam = {"id": new_id, "name": name, "url": url, "lat": lat, "lng": lng, "active": True if not config else False}
+        cam = {"id": new_id, "name": name, "url": url, "lat": lat, "lng": lng,
+               "active": True if not config else False}
+        if external_id:
+            cam["external_id"] = external_id
         if not config:
             cam["active"] = True
         config.append(cam)
@@ -734,6 +753,8 @@ def add_camera():
 
 @bp.route("/api/delete_camera", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_delete")
 def delete_camera():
     try:
         data = request.json or {}
@@ -781,7 +802,262 @@ def delete_camera():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ─── External Camera Source (mugnimaestra.dev) ─────────────────────────────────
+
+# Server-side cache so browser doesn't need direct external API access
+_EXT_CAMERAS_CACHE = {"data": None, "fetched_at": 0.0}
+_EXT_CACHE_TTL = 600  # 10 minutes
+_EXT_CACHE_LOCK = threading.Lock()  # Prevent race conditions on concurrent requests
+
+@bp.route("/api/external_cameras", methods=["GET"])
+def get_external_cameras():
+    """Fetch camera list from external API (mugnimaestra.dev).
+
+    Results are cached server-side for 10 minutes.
+    Uses thread lock to prevent race conditions on concurrent requests.
+    Only caches successful responses — errors are returned immediately.
+    """
+    import urllib.request
+    import urllib.error as urllib_err
+
+    now = time.time()
+
+    # Fast path: return cached data if valid (within lock for consistency)
+    with _EXT_CACHE_LOCK:
+        if _EXT_CAMERAS_CACHE["data"] and (now - _EXT_CAMERAS_CACHE["fetched_at"]) < _EXT_CACHE_TTL:
+            return jsonify(_EXT_CAMERAS_CACHE["data"])
+
+    # Slow path: fetch from external API (outside lock so other requests can read cache)
+    try:
+        external_url = os.environ.get(
+            "EXTERNAL_CAMERA_API",
+            "https://streetside.mugnimaestra.dev/api/cameras"
+        )
+
+        req = urllib.request.Request(
+            external_url,
+            headers={"User-Agent": "Mozilla/5.0 (SmartTraffic-PADI/1.0)", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            import json as _json
+            data = _json.loads(raw) if raw else {}
+
+        cameras = data.get("cameras", []) or []
+        result = []
+
+        for c in cameras:
+            # GeoJSON format: {"geometry": {...}, "properties": {...}}
+            # OR flat format: {"external_id": ..., "name": ..., "snapshot_url": ...}
+            if isinstance(c, dict) and "properties" in c:
+                props = c["properties"] or {}
+                geom = c.get("geometry") or {}
+                coords = geom.get("coordinates") or []
+                lat = coords[1] if len(coords) > 1 else None
+                lng = coords[0] if len(coords) > 0 else None
+            else:
+                props = c
+                lat = props.get("latitude")
+                lng = props.get("longitude")
+
+            ext_id = str(props.get("external_id") or props.get("id") or "")
+            name = props.get("name") or props.get("cctv_name") or f"Camera {ext_id}"
+            city = props.get("city") or props.get("city_name") or ""
+            address = props.get("address") or ""
+            # image1 is the snapshot path from mugnimaestra.dev (e.g. "/img/a/Bendungan-Hilir-001/preview.jpg?token=...")
+            image_path = props.get("snapshot_url") or props.get("image1") or ""
+            stream_url = props.get("stream_url") or ""
+
+            # Build full snapshot URL
+            base_url = os.environ.get(
+                "EXTERNAL_BASE_URL", "https://compe.f-mc.my.id/hlsproxy"
+            )
+            snapshot_url = (base_url + image_path) if image_path and not image_path.startswith("http") else image_path
+
+            # Build HLS stream URL from the same token in image1
+            # Pattern: /img/a/{NAME}/preview.jpg?token=... → /stream/a/{NAME}/video.m3u8?token=...
+            hls_url = ""
+            if image_path:
+                try:
+                    # Extract camera name and token from image1 path
+                    # e.g. "/img/a/Paseban-001/preview.jpg?token=abc123" → "/stream/a/Paseban-001/video.m3u8?token=abc123"
+                    if "/img/a/" in image_path:
+                        parts = image_path.split("/img/a/")
+                        if len(parts) > 1:
+                            rest = parts[1]
+                            cam_name = rest.split("/")[0]
+                            token_match = rest.split("?token=")
+                            token = token_match[1] if len(token_match) > 1 else ""
+                            hls_url = f"{base_url}/stream/a/{cam_name}/video.m3u8?token={token}"
+                except Exception:
+                    hls_url = ""
+
+            result.append({
+                "external_id": ext_id,
+                "name": name,
+                "city": city,
+                "address": address,
+                "latitude": lat,
+                "longitude": lng,
+                "snapshot_url": snapshot_url,
+                "stream_url": stream_url or hls_url,
+                "hls_url": hls_url,
+            })
+
+        resp_data = {
+            "status": "success",
+            "total": len(result),
+            "cameras": result,
+        }
+        # Cache only successful responses (inside lock)
+        with _EXT_CACHE_LOCK:
+            _EXT_CAMERAS_CACHE["data"] = resp_data
+            _EXT_CAMERAS_CACHE["fetched_at"] = time.time()
+        return jsonify(resp_data)
+    except urllib_err.HTTPError as e:
+        return jsonify({"status": "error", "message": f"HTTP {e.code}: {e.reason}"}), 502
+    except urllib_err.URLError as e:
+        return jsonify({"status": "error", "message": f"Connection failed: {e.reason}"}), 503
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ─── HLS Proxy (adds CORS headers so the public live map can play streams) ─────
+
+# The external HLS host does not send Access-Control-Allow-Origin, so browsers
+# block direct playback from livemap. Restrict the proxy to known hosts only.
+_HLS_ALLOWED_HOSTS = {"compe.f-mc.my.id"}
+
+
+@bp.route("/api/hls_proxy", methods=["GET"])
+def hls_proxy():
+    """Proxy HLS manifests (.m3u8) and segments (.ts) from the external
+    streaming server, adding CORS headers so the public live map can play them.
+
+    For manifests, segment/key URIs are rewritten to route back through this
+    proxy so every request carries the proper CORS headers.
+    """
+    target = request.args.get("url", "")
+    if not target:
+        return jsonify({"status": "error", "message": "missing url"}), 400
+
+    parsed = urllib.parse.urlparse(target)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in _HLS_ALLOWED_HOSTS:
+        return jsonify({"status": "error", "message": "host not allowed"}), 403
+
+    try:
+        req = urllib.request.Request(
+            target,
+            headers={
+                "User-Agent": "Mozilla/5.0 (SmartTraffic-PADI/1.0)",
+                "Accept": "*/*",
+            },
+        )
+        upstream = urllib.request.urlopen(req, timeout=15)
+        ctype = upstream.headers.get("Content-Type", "")
+        body = upstream.read()
+    except urllib.error.HTTPError as e:
+        return jsonify({"status": "error", "message": f"HTTP {e.code}"}), 502
+    except urllib.error.URLError as e:
+        return jsonify({"status": "error", "message": f"Connection failed: {e.reason}"}), 503
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    is_manifest = target.split("?")[0].endswith(".m3u8") or "mpegurl" in ctype.lower()
+
+    if is_manifest:
+        text = body.decode("utf-8", errors="ignore")
+        # Carry the manifest token over to segments that lack their own query.
+        token = urllib.parse.parse_qs(parsed.query).get("token", [""])[0]
+
+        def rewrite_uri(uri):
+            uri = uri.strip()
+            if not uri:
+                return uri
+            absolute = urllib.parse.urljoin(target, uri)
+            if not urllib.parse.urlparse(absolute).query and token:
+                absolute = absolute + "?token=" + urllib.parse.quote(token)
+            return "/api/hls_proxy?url=" + urllib.parse.quote(absolute, safe="")
+
+        out_lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                out_lines.append(line)
+            elif stripped.startswith("#"):
+                # Rewrite URI="..." attributes (EXT-X-KEY, EXT-X-MAP, etc.)
+                if 'URI="' in stripped:
+                    line = re.sub(
+                        r'URI="([^"]+)"',
+                        lambda m: 'URI="' + rewrite_uri(m.group(1)) + '"',
+                        line,
+                    )
+                out_lines.append(line)
+            else:
+                out_lines.append(rewrite_uri(stripped))
+        resp = Response("\n".join(out_lines), content_type="application/vnd.apple.mpegurl")
+    else:
+        resp = Response(body, content_type=ctype or "video/mp2t")
+
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@bp.route("/api/external_cameras/test", methods=["GET"])
+@login_required
+def test_external_camera():
+    """Test a single external camera URL — fetch one frame to verify it works."""
+    try:
+        import urllib.request
+        import urllib.error as urllib_err
+        import time
+
+        url = request.args.get("url", "")
+        if not url:
+            return jsonify({"status": "error", "message": "Missing url"}), 400
+
+        start = time.time()
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (SmartTraffic-PADI/1.0)",
+                "Range": "bytes=0-8192",  # Only first 8KB to check if image
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                status = resp.status
+                content_type = resp.headers.get("Content-Type", "")
+                body = resp.read(8192)
+        except urllib_err.HTTPError as e:
+            return jsonify({
+                "status": "error",
+                "code": e.code,
+                "message": f"HTTP {e.code}: {e.reason}",
+            }), e.code
+
+        latency_ms = int((time.time() - start) * 1000)
+        is_image = "image" in content_type.lower() or body[:2] in (b"\xff\xd8", b"\x89PNG")
+
+        return jsonify({
+            "status": "success" if status == 200 else "error",
+            "http_status": status,
+            "content_type": content_type,
+            "latency_ms": latency_ms,
+            "is_image": bool(is_image),
+            "preview_size": len(body),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route("/add_camera", methods=["GET"])
+@admin_required
+def add_camera_page():
+    """Browse and select cameras from external API to add to SmartTraffic."""
+    return render_template("add_camera.html")
+
 @bp.route("/api/switch_source", methods=["POST"])
+@admin_required
 def switch_source():
     try:
         data = request.json
@@ -846,9 +1122,12 @@ def replay_camera():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route("/api/history")
+@rate_limit(limit_name="history")
 def get_history_api():
     period = request.args.get("period", "30m")
-    camera_id = request.args.get("camera_id")
+    # Validate camera_id safely
+    camera_id_raw = request.args.get("camera_id")
+    camera_id = safe_camera_id(camera_id_raw) if camera_id_raw else None
     start_ts_arg = request.args.get("start_ts")
     end_ts_arg = request.args.get("end_ts")
     
@@ -900,6 +1179,30 @@ def get_history_api():
         
     rows = get_history_range(camera_id=camera_id, start_ts=start_ts, end_ts=end_ts)
     
+    # Fetch actual violations
+    viol_rows = []
+    try:
+        from app.database import get_db_connection, _fetchall
+        conn = get_db_connection(timeout_s=2)
+        params = []
+        conds = []
+        if start_ts:
+            conds.append("timestamp >= ?")
+            params.append(start_ts)
+        if end_ts:
+            conds.append("timestamp <= ?")
+            params.append(end_ts)
+        if camera_id:
+            conds.append("camera_id = ?")
+            params.append(str(camera_id))
+        
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        query = f"SELECT timestamp FROM violations {where}"
+        viol_rows = _fetchall(conn, query, params)
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching violations for history: {e}")
+    
     # Aggregate
     buckets = {}
     for r in rows:
@@ -911,6 +1214,7 @@ def get_history_api():
                 "count": 0,
                 "cars": 0,
                 "motors": 0,
+                "violations": 0,
                 "density_sum": 0,
                 "density_n": 0,
                 "density_peak": 0,
@@ -928,6 +1232,16 @@ def get_history_api():
         buckets[bucket_ts]["density_n"] += 1
         if dens > buckets[bucket_ts]["density_peak"]:
             buckets[bucket_ts]["density_peak"] = dens
+            
+    for v in viol_rows:
+        ts = v["timestamp"]
+        bucket_ts = int(ts // interval) * interval
+        if bucket_ts not in buckets:
+            buckets[bucket_ts] = {
+                "count": 0, "cars": 0, "motors": 0, "violations": 0,
+                "density_sum": 0, "density_n": 0, "density_peak": 0, "cam_ids": set()
+            }
+        buckets[bucket_ts]["violations"] = buckets[bucket_ts].get("violations", 0) + 1
         
     # Format for Chart.js
     sorted_ts = sorted(buckets.keys())
@@ -950,6 +1264,7 @@ def get_history_api():
             "count": b["count"],
             "cars": b["cars"],
             "motors": b["motors"],
+            "violations": b.get("violations", 0),
             "count_per_cam": int(round((b["count"] or 0) / denom)),
             "cars_per_cam": int(round((b["cars"] or 0) / denom)),
             "motors_per_cam": int(round((b["motors"] or 0) / denom)),
@@ -1115,6 +1430,7 @@ def metrics():
     return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4; charset=utf-8")
 
 @bp.route("/api/stats")
+@rate_limit(limit_name="stats")
 def get_stats():
     # Return traffic stats
     try:
@@ -1223,6 +1539,8 @@ def api_density():
 
 @bp.route("/api/edit_camera", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def edit_camera():
     try:
         data = request.json
@@ -1244,6 +1562,9 @@ def edit_camera():
                     cam["lng"] = float(lng_raw) if lng_raw not in (None, "") else None
                 except Exception:
                     return jsonify({"status": "error", "message": "Invalid lat/lng"}), 400
+                ext_id = str(data.get("external_id") or "").strip()
+                if ext_id:
+                    cam["external_id"] = ext_id
                 updated = True
                 break
         
@@ -1264,6 +1585,8 @@ def edit_camera():
 
 @bp.route("/api/reset_data", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def reset_data():
     try:
         data = request.json or {}
@@ -1282,6 +1605,7 @@ def reset_data():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @bp.route("/api/predict_traffic", methods=["POST"])
+@rate_limit(limit_name="predict")
 def predict_traffic():
     try:
         data = request.json
@@ -1397,6 +1721,8 @@ def predict_traffic():
 
 @bp.route("/api/backfill_camera", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def backfill_camera():
     try:
         data = request.json
@@ -1420,6 +1746,8 @@ def datalake_stats():
     return jsonify(result)
 
 @bp.route("/api/chat", methods=["POST"])
+@rate_limit(limit_name="chat")
+@csrf_required
 def chat_api():
     locked = False
     try:
@@ -1458,7 +1786,8 @@ def chat_api():
             return bool(_ollama_resolve_model())
 
         def build_context_snapshot():
-            config = load_config() or []
+            from app.utils import load_config as _load_config
+            config = _load_config() or []
             cam_ids = [c.get("id") for c in config if c.get("id")]
             total_cams = len(cam_ids)
 
@@ -1617,6 +1946,38 @@ def chat_api():
 
             num_predict = 420 if intent != "general" else 1200
             temperature = 0.1 if intent != "general" else 0.2
+
+            # ── Use AI Provider (OpenAI-compatible) if configured ──
+            import app.config as _ai_cfg
+            if _ai_cfg.AI_USE_FOR_CHAT and _ai_cfg.AI_API_KEY and _ai_cfg.AI_BASE_URL:
+                try:
+                    ai_body = {
+                        "model": _ai_cfg.AI_CHAT_MODEL or _ai_cfg.AI_MODEL,
+                        "messages": messages,
+                        "max_tokens": num_predict,
+                        "temperature": temperature,
+                    }
+                    ai_url = f"{_ai_cfg.AI_BASE_URL.rstrip('/')}/chat/completions"
+                    ai_headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {_ai_cfg.AI_API_KEY}",
+                    }
+                    ai_data = json.dumps(ai_body).encode("utf-8")
+                    ai_req = urllib.request.Request(ai_url, data=ai_data, headers=ai_headers, method="POST")
+                    
+                    with urllib.request.urlopen(ai_req, timeout=30) as ai_resp:
+                        ai_result = json.loads(ai_resp.read().decode("utf-8"))
+                    
+                    ai_content = ai_result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    if ai_content:
+                        provider = _ai_cfg.AI_PROVIDER
+                        model = _ai_cfg.AI_CHAT_MODEL or _ai_cfg.AI_MODEL
+                        return reply(ai_content, provider=provider, model=model, ui_actions=ui_actions)
+                except Exception as ai_err:
+                    print(f"[CHAT] AI provider error, falling back to Ollama: {ai_err}")
+                    # Fall through to Ollama
+
+            # ── Ollama (local) fallback ──
             num_ctx = 4096 if intent != "general" else 4096
             body = {
                 "model": model,
@@ -3377,14 +3738,9 @@ def chat_api():
             q0 = str(message or "").strip().lower()
             is_greet = bool(re.search(r"\b(hai|halo|hello|hi|selamat pagi|selamat siang|selamat sore|selamat malam|pagi|siang|sore|malam)\b", q0))
             is_thanks = bool(re.search(r"\b(makasih|terima kasih|thx|thanks)\b", q0))
-            if is_greet:
-                return reply(
-                    "Halo! Aku siap bantu. Kamu bisa minta prediksi (mis. 'macet di braga jam 4?'), tampilkan kamera tertentu, atau minta ringkasan analisis (periode 1h/6h/24h/7d/30d).",
-                    provider="system",
-                    ui_actions=ui_actions,
-                )
+            # Greetings handled by AI provider (no hardcoded response)
             if is_thanks:
-                return reply("Sama-sama. Kalau mau lanjut, sebutkan titik/kamera atau tujuan lokasinya ya.", provider="system", ui_actions=ui_actions)
+                return reply("Sama-sama! Silakan tanya lagi kalau butuh bantuan.", provider="system", ui_actions=ui_actions)
 
         def format_route_advice(data):
             d = data or {}
@@ -3452,7 +3808,8 @@ def chat_api():
         if str((qd or {}).get("intent") or "") == "route_advice":
             return reply(format_route_advice(qd), provider="system")
 
-        if _planner_enabled() and ollama_enabled() and _ollama_reachable(timeout_s=4):
+        # Skip planner for simple greetings — let AI provider handle naturally
+        if not is_greet and not (_ai_cfg_main.AI_USE_FOR_CHAT and _ai_cfg_main.AI_API_KEY) and _planner_enabled() and ollama_enabled() and _ollama_reachable(timeout_s=4):
             plan_reply, plan_actions, plan_err = call_ollama_planner(message, qd, ui_actions)
             merged_actions = []
             if ui_actions:
@@ -3485,15 +3842,101 @@ def chat_api():
                 if fb:
                     return reply(fb, provider="system", ui_actions=ui_actions)
             if intent_now == "general" and not (ollama_enabled() and _ollama_reachable(timeout_s=4)):
-                return reply(
-                    "Aku bisa bantu dari data SmartTraffic, dan juga bisa jawab pertanyaan umum. Tapi LLM-nya lagi belum tersambung. "
-                    "Coba refresh atau cek /api/chat/health dulu ya.",
-                    provider="system",
-                    ui_actions=ui_actions,
-                )
+                # Check if AI provider is available as alternative
+                import app.config as _ai_cfg3
+                if _ai_cfg3.AI_USE_FOR_CHAT and _ai_cfg3.AI_API_KEY:
+                    pass  # Don't block — AI provider will handle it below
+                else:
+                    return reply(
+                        "LLM belum tersambung. Konfigurasi AI provider di Settings atau jalankan Ollama.",
+                        provider="system",
+                        ui_actions=ui_actions,
+                    )
+
+        # Try AI provider FIRST (before Ollama)
+        import app.config as _ai_cfg_main
+        if _ai_cfg_main.AI_USE_FOR_CHAT and _ai_cfg_main.AI_API_KEY and _ai_cfg_main.AI_BASE_URL:
+            try:
+                # Build context with real system data
+                _sys_context = ""
+                try:
+                    from app.utils import load_config
+                    from app.database import get_violations_summary, get_history_range
+                    import app.globals as _g_chat
+                    
+                    cameras = load_config() or []
+                    cam_names = [c.get("name", "") for c in cameras]
+                    
+                    # Get violation stats
+                    violations_info = ""
+                    try:
+                        v_summary = get_violations_summary(hours=24) or {}
+                        violations_info = f"Pelanggaran 24 jam terakhir: total={v_summary.get('total', 0)}, by_type={v_summary.get('by_type', {})}, by_camera={v_summary.get('by_camera', [])[:3]}"
+                    except Exception:
+                        violations_info = "Data pelanggaran tersedia via API /api/violations/executive_summary"
+                    
+                    # Get live traffic stats
+                    live_stats = ""
+                    try:
+                        stats = _g_chat.global_stats or {}
+                        live_info = []
+                        for cam_id, s in stats.items():
+                            if isinstance(s, dict):
+                                live_info.append(f"{s.get('name','?')}: {s.get('current_count',0)} kendaraan")
+                        live_stats = "Live traffic: " + ", ".join(live_info[:5]) if live_info else ""
+                    except Exception:
+                        pass
+                    
+                    _sys_context = f"""
+DATA SISTEM SAAT INI:
+- Kamera aktif: {len(cameras)} ({', '.join(cam_names[:5])})
+- {violations_info}
+- {live_stats}
+- Enforcement: parkir liar (60s), busway (5s), jalur sepeda (5s), lawan arah (8s)
+"""
+                except Exception:
+                    _sys_context = ""
+                
+                system_prompt = f"""Kamu adalah PADI Assistant — asisten AI untuk Platform Adaptive Deteksi Indonesia.
+Sistem ini adalah platform monitoring lalu lintas real-time berbasis CCTV + AI (YOLO detection + enforcement otomatis).
+
+KEMAMPUAN SISTEM:
+- Deteksi kendaraan real-time (mobil, motor, bus) di multiple CCTV
+- Enforcement otomatis: parkir liar, busway, jalur sepeda, lawan arah
+- ANPR (baca plat nomor) dengan PaddleOCR + AI correction
+- Executive Summary / laporan pelanggaran
+- CRM monitoring social media (@DishubDKI di X.com)
+- Analytics & export data CSV
+
+{_sys_context}
+
+ATURAN:
+- Jawab dalam Bahasa Indonesia, ringkas dan informatif
+- Jika ditanya data spesifik yang kamu punya di context, berikan jawabannya
+- Jika ditanya hal yang tidak ada di context, arahkan user ke halaman yang relevan (Enforcement, Analytics, Executive Summary)
+- Jangan bilang "tidak memiliki data" jika informasinya ada di context di atas"""
+
+                ai_messages = [{"role": "system", "content": system_prompt}]
+                ai_messages.append({"role": "user", "content": message})
+                ai_body = {
+                    "model": _ai_cfg_main.AI_CHAT_MODEL or _ai_cfg_main.AI_MODEL,
+                    "messages": ai_messages,
+                    "max_tokens": 1000,
+                    "temperature": 0.3,
+                }
+                ai_url = f"{_ai_cfg_main.AI_BASE_URL.rstrip('/')}/chat/completions"
+                ai_headers = {"Content-Type": "application/json", "Authorization": f"Bearer {_ai_cfg_main.AI_API_KEY}"}
+                ai_data = json.dumps(ai_body).encode("utf-8")
+                ai_req = urllib.request.Request(ai_url, data=ai_data, headers=ai_headers, method="POST")
+                with urllib.request.urlopen(ai_req, timeout=30) as ai_resp:
+                    ai_result = json.loads(ai_resp.read().decode("utf-8"))
+                ai_content = ai_result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if ai_content:
+                    return reply(ai_content, provider=_ai_cfg_main.AI_PROVIDER, model=_ai_cfg_main.AI_CHAT_MODEL or _ai_cfg_main.AI_MODEL, ui_actions=ui_actions)
+            except Exception as ai_err:
+                print(f"[CHAT] AI provider failed: {ai_err}")
 
         if ollama_enabled() and _ollama_reachable(timeout_s=4):
-            llm, llm_err = call_ollama(message)
             if llm:
                 return reply(llm, provider="ollama", model=_ollama_resolve_model() or "", ui_actions=ui_actions)
             return reply(
@@ -3574,6 +4017,25 @@ def chat_health_api():
             chat_test_ok = False
             chat_test_error = str(e)
 
+    # Check if AI provider is configured (takes priority over Ollama)
+    import app.config as _ai_health
+    ai_active = bool(_ai_health.AI_USE_FOR_CHAT and _ai_health.AI_API_KEY and _ai_health.AI_BASE_URL)
+    
+    if ai_active:
+        # Report AI provider as the active LLM
+        return jsonify({
+            "enabled": True,
+            "url": _ai_health.AI_BASE_URL,
+            "model": _ai_health.AI_CHAT_MODEL or _ai_health.AI_MODEL,
+            "env_model": "",
+            "available_models": [_ai_health.AI_CHAT_MODEL or _ai_health.AI_MODEL],
+            "reachable": True,
+            "error": None,
+            "chat_test_ok": None,
+            "chat_test_error": None,
+            "provider": _ai_health.AI_PROVIDER,
+        })
+
     return jsonify(
         {
             "enabled": enabled,
@@ -3585,6 +4047,7 @@ def chat_health_api():
             "error": error,
             "chat_test_ok": chat_test_ok,
             "chat_test_error": chat_test_error,
+            "provider": "ollama",
         }
     )
 
@@ -3991,6 +4454,8 @@ def ai_tools_api():
 
 
 @bp.route("/api/ai/query", methods=["POST"])
+@csrf_required
+@rate_limit(limit_name="chat")
 def ai_query_api():
     payload = request.get_json(silent=True) or {}
     if isinstance(payload, dict) and isinstance(payload.get("batch"), list):
@@ -4053,10 +4518,14 @@ def _count_violations(camera_id=None, violation_type=None, start_ts=None, end_ts
             params.append(str(status))
         where_sql = (" WHERE " + " AND ".join(where)) if where else ""
         conn = get_db_connection()
-        c = conn.cursor()
         try:
-            c.execute(f"SELECT COUNT(*) FROM violations{where_sql}", params)
-            return int(c.fetchone()[0])
+            from app.database import _execute
+            c = _execute(conn, f"SELECT COUNT(*) as cnt FROM violations{where_sql}", params)
+            row = c.fetchone()
+            if hasattr(row, 'keys'):
+                r_dict = dict(row)
+                return int(r_dict.get("cnt", 0) or r_dict.get("count", 0) or 0)
+            return int(row[0]) if row else 0
         finally:
             conn.close()
     except Exception:
@@ -4116,6 +4585,58 @@ def evidence_file(relpath):
         return Response("Not Found", status=404)
 
 
+@bp.route("/evidence_crop/<int:violation_id>")
+def evidence_crop(violation_id):
+    """Serve a cropped vehicle thumbnail from evidence image using stored bbox."""
+    import cv2
+    import numpy as np
+    try:
+        from app.database import get_violation
+        v = get_violation(violation_id)
+        if not v or not v.get("evidence_path") or not v.get("bbox"):
+            return Response("Not Found", status=404)
+        
+        # Load evidence image - try both path resolutions
+        from app.config import EVIDENCE_DIR
+        img_path = os.path.join(EVIDENCE_DIR, v["evidence_path"].replace("/", os.sep))
+        if not os.path.isfile(img_path):
+            # Try from parent dir (DB stores path relative to data/ dir)
+            img_path = os.path.join(os.path.dirname(EVIDENCE_DIR), v["evidence_path"].replace("/", os.sep))
+        if not os.path.isfile(img_path):
+            return Response("Not Found", status=404)
+        
+        img = cv2.imread(img_path)
+        if img is None:
+            return Response("Not Found", status=404)
+        
+        # Crop bbox area with padding
+        bbox = v["bbox"]
+        if isinstance(bbox, str):
+            bbox = json.loads(bbox)
+        x1, y1, x2, y2 = [int(b) for b in bbox]
+        h, w = img.shape[:2]
+        pad = 30
+        x1 = max(0, x1 - pad)
+        y1 = max(0, y1 - pad)
+        x2 = min(w, x2 + pad)
+        y2 = min(h, y2 + pad)
+        
+        crop = img[y1:y2, x1:x2]
+        if crop.size == 0:
+            return Response("Not Found", status=404)
+        
+        # Resize to thumbnail (max 200px)
+        ch, cw = crop.shape[:2]
+        if cw > 200:
+            scale = 200 / cw
+            crop = cv2.resize(crop, (200, int(ch * scale)))
+        
+        _, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return Response(buf.tobytes(), mimetype="image/jpeg")
+    except Exception:
+        return Response("Not Found", status=404)
+
+
 # ---- Zones API ----
 
 @bp.route("/api/zones", methods=["GET"])
@@ -4131,6 +4652,8 @@ def api_zones_list():
 
 @bp.route("/api/zones", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def api_zones_create():
     try:
         p = request.get_json(silent=True) or {}
@@ -4162,6 +4685,7 @@ def api_zones_create():
 
 @bp.route("/api/zones/<int:zone_id>", methods=["PUT", "PATCH"])
 @admin_required
+@csrf_required
 def api_zones_update(zone_id):
     try:
         p = request.get_json(silent=True) or {}
@@ -4180,6 +4704,7 @@ def api_zones_update(zone_id):
 
 @bp.route("/api/zones/<int:zone_id>", methods=["DELETE"])
 @admin_required
+@csrf_required
 def api_zones_delete(zone_id):
     try:
         ok = delete_zone(zone_id)
@@ -4191,14 +4716,16 @@ def api_zones_delete(zone_id):
 # ---- Violations API ----
 
 @bp.route("/api/violations")
+@rate_limit(limit_name="violations_list")
 def api_violations_list():
     try:
         limit = max(1, min(1000, int(request.args.get("limit") or 50)))
         offset = max(0, int(request.args.get("offset") or 0))
-        cam = request.args.get("camera_id") or None
-        vtype = request.args.get("violation_type") or None
-        plate = request.args.get("plate") or None
-        status = request.args.get("status") or None
+        # Safe validation for all string params
+        cam = safe_camera_id(request.args.get("camera_id")) if request.args.get("camera_id") else None
+        vtype = safe_string(request.args.get("violation_type"), max_length=32)
+        plate = safe_string(request.args.get("plate"), max_length=20)
+        status = safe_string(request.args.get("status"), max_length=16)
         start_ts = _parse_ts(request.args.get("start"))
         end_ts = _parse_ts(request.args.get("end"))
         rows = list_violations(
@@ -4227,7 +4754,7 @@ def api_violations_get(vid):
 def api_violations_update(vid):
     try:
         p = request.get_json(silent=True) or {}
-        fields = {k: v for k, v in p.items() if k in ("status", "dispatched_unit", "notes", "plate_text")}
+        fields = {k: v for k, v in p.items() if k in ("status", "dispatched_unit", "notes", "plate_text", "plate_confidence", "vehicle_class")}
         ok = update_violation(vid, **fields)
         return jsonify({"status": "success" if ok else "not_modified"})
     except Exception as e:
@@ -4342,6 +4869,9 @@ def api_crm_list():
 
 
 @bp.route("/api/crm/reports", methods=["POST"])
+@admin_required
+@csrf_required
+@rate_limit(limit_name="crm")
 def api_crm_create():
     try:
         p = request.get_json(silent=True) or {}
@@ -4378,6 +4908,7 @@ def api_crm_create():
 
 @bp.route("/api/crm/reports/<int:rid>", methods=["PATCH", "PUT"])
 @admin_required
+@csrf_required
 def api_crm_update(rid):
     try:
         p = request.get_json(silent=True) or {}
@@ -4428,6 +4959,39 @@ def api_crm_social_mentions():
 
 # ---- Helpers & metadata ----
 
+@bp.route("/api/ai/test")
+def api_ai_test():
+    """Test AI provider connection."""
+    try:
+        from app.services.ai_ocr import ai_test_connection
+        result = ai_test_connection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+@bp.route("/api/ai/ollama_models")
+@admin_required
+def api_ai_ollama_models():
+    """List locally available Ollama models (for AI Engine switching)."""
+    try:
+        models = _ollama_get_models_cached(cache_seconds=10, timeout_s=4, force=True)
+        return jsonify({
+            "status": "success",
+            "reachable": True,
+            "models": models or [],
+            "url": _ollama_base_url(),
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "success",
+            "reachable": False,
+            "models": [],
+            "url": _ollama_base_url(),
+            "error": str(e),
+        })
+
+
 @bp.route("/api/enforcement/meta")
 def api_enforcement_meta():
     return jsonify({
@@ -4438,21 +5002,15 @@ def api_enforcement_meta():
 
 
 @bp.route("/api/ocr/test", methods=["POST"])
+@csrf_required
+@rate_limit(limit_name="ocr_test")
 def api_ocr_test():
-    """Test OCR on an uploaded image. Detects vehicle plate only (ignores watermarks)."""
+    """Test OCR on an uploaded image. Single-pass: PaddleOCR + AI correction + Vehicle ID."""
     try:
         import cv2
         import numpy as np
-        from app.services.anpr import (
-            recognize_plate,
-            _prepare_plate_crop,
-            _build_paddle_candidates,
-            _ocr_paddleocr,
-            format_plate_for_display,
-            _normalize_plate_candidate,
-            _score_plate_candidate,
-            _engine_lock,
-        )
+        from app.services.anpr import recognize_plate
+        from app.services.ai_ocr import ai_identify_vehicle
 
         if 'image' not in request.files:
             return jsonify({"status": "error", "message": "No image uploaded"}), 400
@@ -4468,94 +5026,38 @@ def api_ocr_test():
             return jsonify({"status": "error", "message": "Cannot decode image"}), 400
 
         h, w = img.shape[:2]
-        results = []
 
-        # Step 1: Try to find the red violation bbox in the image and crop the vehicle
-        vehicle_crop = _find_vehicle_region(img)
+        # Single pass: use full ANPR pipeline (PaddleOCR + AI)
+        plate, conf, engine = recognize_plate(img, (0, 0, w, h))
         
-        # Step 2: Run OCR on vehicle region (or full image if no red box found)
-        target = vehicle_crop if vehicle_crop is not None else img
-        th, tw = target.shape[:2]
-
-        # Use the same ANPR pipeline as violation flow:
-        # exact crop target -> enhance -> PaddleOCR
-        plate, conf, engine = recognize_plate(target, (0, 0, tw, th))
+        results = []
         if plate:
             results.append({
                 "text": plate,
                 "confidence": round(float(conf), 3),
                 "method": engine,
             })
-        
-        # If ANPR pipeline failed, keep all fallback OCR attempts inside the
-        # detected vehicle crop so the OCR test page behaves like live ANPR.
-        if not results:
-            plate_crop = _prepare_plate_crop(target, (0, 0, tw, th))
-            if plate_crop is not None:
-                paddle_candidates = _build_paddle_candidates(plate_crop)
-                with _engine_lock:
-                    for tag, candidate in paddle_candidates:
-                        txt_bot, conf_bot = _ocr_paddleocr(candidate)
-                        if not txt_bot or conf_bot < 0.15:
-                            continue
-                        formatted_bot = format_plate_for_display(txt_bot)
-                        results.append({
-                            "text": formatted_bot,
-                            "confidence": round(float(conf_bot), 3),
-                            "method": f"paddleocr_test_{tag}",
-                        })
-            
-            # Only if no red bbox exists, allow a broader bottom-half fallback
-            # for standalone plate photos or raw vehicle images.
-            if not results and vehicle_crop is None:
-                bottom = target[th//2:, :]
-                if bottom.size > 0:
-                    blurred_b = cv2.GaussianBlur(bottom, (0, 0), 2)
-                    bottom_sharp = cv2.addWeighted(bottom, 1.8, blurred_b, -0.8, 0)
-                    with _engine_lock:
-                        txt_bot, conf_bot = _ocr_paddleocr(bottom_sharp)
-                    if txt_bot and conf_bot >= 0.15:
-                        formatted_bot = format_plate_for_display(txt_bot)
-                        results.append({
-                            "text": formatted_bot,
-                            "confidence": round(float(conf_bot), 3),
-                            "method": "paddleocr_bottom",
-                        })
 
-        # Filter for plate-format matches
-        best = None
-        for r in results:
-            normalized = _normalize_plate_candidate(r['text'])
-            score = _score_plate_candidate(normalized, r['confidence'], r['method'])
-            if score > 0:
-                r['text'] = normalized
-                r['method'] += ' [PLATE]'
-                r['_score'] = score
+        # Vehicle identification using AI vision model
+        vehicle_identity = None
+        try:
+            info = ai_identify_vehicle(img)
+            if info:
+                vehicle_identity = info
+        except Exception:
+            pass
 
-        plate_results = [r for r in results if r.get('_score', -1) > 0]
-        if plate_results:
-            best = max(plate_results, key=lambda x: (x.get('_score', 0), x['confidence']))
-        
-        if not best:
-            for r in sorted(results, key=lambda x: x['confidence'], reverse=True):
-                txt = r['text']
-                has_letter = any(c.isalpha() for c in txt)
-                has_digit = any(c.isdigit() for c in txt)
-                if has_letter and has_digit and 4 <= len(txt) <= 12 and r['confidence'] >= 0.3:
-                    best = r
-                    break
-
-        if not best and results:
-            best = max(results, key=lambda x: x['confidence'])
+        # Pick best
+        best = results[0] if results else None
 
         return jsonify({
             "status": "success",
             "plate": best["text"] if best else None,
             "confidence": best["confidence"] if best else 0,
             "engine": best["method"] if best else "none",
-            "all_results": results[:10],
+            "all_results": results,
             "image_size": f"{w}x{h}",
-            "vehicle_detected": vehicle_crop is not None,
+            "vehicle_identity": vehicle_identity,
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -4756,12 +5258,23 @@ def api_executive_summary():
 
         summary = violation_summary(start_ts=start_ts, end_ts=now)
         prev_summary = violation_summary(start_ts=start_ts - secs, end_ts=start_ts)
+        all_time_summary = violation_summary()  # No time filter = all time
         heatmap = violation_heatmap_by_camera(start_ts=start_ts, end_ts=now)
         top_recs = recommend_enforcement_points(top_n=5, start_ts=start_ts, end_ts=now)
         crm = crm_summary()
+        
+        # Get recent violations for dashboard display
+        recent = list_violations(limit=20, offset=0, start_ts=start_ts, end_ts=now)
+        # Fallback: if no violations in period, get most recent overall
+        recent_all = []
+        if not recent:
+            recent_all = list_violations(limit=20, offset=0)
 
         total = int(summary.get("total") or 0)
         prev_total = int(prev_summary.get("total") or 0)
+        total_all_time = int(all_time_summary.get("total") or 0)
+        summary["total_all_time"] = total_all_time
+        summary["by_type_all_time"] = all_time_summary.get("by_type", {})
         delta_pct = None
         if prev_total > 0:
             delta_pct = round(((total - prev_total) / prev_total) * 100.0, 1)
@@ -4805,6 +5318,8 @@ def api_executive_summary():
             "heatmap": heatmap,
             "top_recommendations": top_recs,
             "crm": crm,
+            "recent": recent,
+            "recent_all": recent_all,
             "narrative": bullets,
         })
     except Exception as e:
@@ -4903,6 +5418,15 @@ def api_settings_get():
                 "x_search_query": cfg.X_SEARCH_QUERY,
                 "x_cookies_loaded": os.path.exists(cfg.X_COOKIES_FILE),
             },
+            "ai_provider": {
+                "provider": cfg.AI_PROVIDER,
+                "base_url": cfg.AI_BASE_URL,
+                "api_key_set": bool(cfg.AI_API_KEY),
+                "model": cfg.AI_MODEL,
+                "use_ai_for_anpr": cfg.AI_USE_FOR_ANPR,
+                "use_ai_for_chat": cfg.AI_USE_FOR_CHAT,
+                "chat_model": cfg.AI_CHAT_MODEL,
+            },
             "general": {
                 "timezone": cfg.TIMEZONE,
             },
@@ -4919,6 +5443,8 @@ def api_settings_get():
 
 @bp.route("/api/settings", methods=["POST", "PATCH"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def api_settings_update():
     """Update runtime settings used by the active live pipeline."""
     import app.config as cfg
@@ -5010,6 +5536,30 @@ def api_settings_update():
             except Exception as e:
                 return jsonify({"status": "error", "message": f"Invalid cookies JSON: {e}"}), 400
 
+    # AI Provider settings
+    ai = p.get("ai_provider") or {}
+    if "provider" in ai:
+        cfg.AI_PROVIDER = str(ai["provider"]).strip()
+        updated.append("ai_provider")
+    if "base_url" in ai:
+        cfg.AI_BASE_URL = str(ai["base_url"]).strip()
+        updated.append("ai_base_url")
+    if "api_key" in ai:
+        cfg.AI_API_KEY = str(ai["api_key"]).strip()
+        updated.append("ai_api_key")
+    if "model" in ai:
+        cfg.AI_MODEL = str(ai["model"]).strip()
+        updated.append("ai_model")
+    if "use_ai_for_anpr" in ai:
+        cfg.AI_USE_FOR_ANPR = bool(ai["use_ai_for_anpr"])
+        updated.append("ai_use_for_anpr")
+    if "use_ai_for_chat" in ai:
+        cfg.AI_USE_FOR_CHAT = bool(ai["use_ai_for_chat"])
+        updated.append("ai_use_for_chat")
+    if "chat_model" in ai:
+        cfg.AI_CHAT_MODEL = str(ai["chat_model"]).strip()
+        updated.append("ai_chat_model")
+
     # General settings
     general = p.get("general") or {}
     if "timezone" in general:
@@ -5066,6 +5616,8 @@ def api_settings_update():
 
 @bp.route("/api/settings/restart_agents", methods=["POST"])
 @admin_required
+@csrf_required
+@rate_limit(limit_name="camera_edit")
 def api_restart_agents():
     """Restart all camera agents (useful after model switch)."""
     import app.globals as g_state
@@ -5085,6 +5637,264 @@ def api_restart_agents():
         "status": "success",
         "agents_running": len(g_state.camera_agents),
     })
+
+
+# ==============================================================
+# AGENT TOOLS (scripts in /tools folder)
+# ==============================================================
+import sys
+import subprocess as _subprocess
+
+# Registry of available agent tools (scripts in the /tools folder).
+# Each tool maps to metadata used by the Settings UI for grouping,
+# labeling, argument rendering, and destructive-action warnings.
+AGENT_TOOLS = {
+    # ---- DIAGNOSTIC (read-only) ----
+    "check_status": {
+        "name": "Check Status",
+        "script": "check_status.py",
+        "category": "diagnostic",
+        "description": "Cek statistik pelanggaran (total, ada plat, ada evidence, ada notes).",
+        "icon": "fa-chart-bar",
+        "destructive": False,
+        "args": [],
+    },
+    "check_busway": {
+        "name": "Check Busway",
+        "script": "check_busway.py",
+        "category": "diagnostic",
+        "description": "Hitung pelanggaran berdasarkan tipe, khusus busway.",
+        "icon": "fa-road",
+        "destructive": False,
+        "args": [],
+    },
+    "check_notes": {
+        "name": "Check Notes",
+        "script": "check_notes.py",
+        "category": "diagnostic",
+        "description": "Distribusi notes pada pelanggaran (top 20).",
+        "icon": "fa-sticky-note",
+        "destructive": False,
+        "args": [],
+    },
+    "check_zones": {
+        "name": "Check Zones",
+        "script": "check_zones.py",
+        "category": "diagnostic",
+        "description": "Daftar semua zone pelanggaran terdaftar.",
+        "icon": "fa-map-location-dot",
+        "destructive": False,
+        "args": [],
+    },
+    # ---- MAINTENANCE (modifies data) ----
+    "dedup_violations": {
+        "name": "Dedup Violations",
+        "script": "dedup_violations.py",
+        "category": "maintenance",
+        "description": "Hapus pelanggaran duplikat (plat sama + kamera sama dalam window). Juga hapus yang evidence-nya hilang.",
+        "icon": "fa-clone",
+        "destructive": True,
+        "args": [
+            {"name": "dry_run", "flag": "--dry-run", "type": "bool", "default": True, "label": "Dry Run (preview saja)"},
+            {"name": "window", "flag": "--window", "type": "number", "default": 300, "label": "Window (detik)", "min": 10, "max": 3600},
+        ],
+    },
+    "remove_no_evidence": {
+        "name": "Remove No Evidence",
+        "script": "remove_no_evidence.py",
+        "category": "maintenance",
+        "description": "Hapus pelanggaran yang file evidence-nya tidak ada di disk.",
+        "icon": "fa-trash-can",
+        "destructive": True,
+        "args": [],
+    },
+    "cleanup_bad_violations": {
+        "name": "Cleanup Bad Violations",
+        "script": "cleanup_bad_violations.py",
+        "category": "maintenance",
+        "description": "Hapus pelanggaran dengan evidence buruk (TIDAK ADA KENDARAAN, kendaraan terpotong, atau tidak ada plat) via AI vision.",
+        "icon": "fa-broom",
+        "destructive": True,
+        "args": [
+            {"name": "dry_run", "flag": "--dry-run", "type": "bool", "default": True, "label": "Dry Run (preview saja)"},
+            {"name": "limit", "flag": "--limit", "type": "number", "default": 50, "label": "Limit", "min": 1, "max": 500},
+        ],
+    },
+    "fill_plates_now": {
+        "name": "Fill Plates Now",
+        "script": "fill_plates_now.py",
+        "category": "maintenance",
+        "description": "Isi plat nomor / merek / warna yang kosong via AI vision dari gambar evidence.",
+        "icon": "fa-id-card",
+        "destructive": False,
+        "args": [
+            {"name": "limit", "flag": "--limit", "type": "number", "default": 50, "label": "Limit", "min": 1, "max": 500},
+        ],
+    },
+    # ---- TEST ----
+    "test_ai_api": {
+        "name": "Test AI API",
+        "script": "test_ai_api.py",
+        "category": "test",
+        "description": "Tes koneksi AI API dan ketersediaan model (text + vision).",
+        "icon": "fa-robot",
+        "destructive": False,
+        "args": [],
+    },
+    "test_dashboard_api": {
+        "name": "Test Dashboard API",
+        "script": "test_dashboard_api.py",
+        "category": "test",
+        "description": "Tes endpoint dashboard API untuk diagnose data kosong.",
+        "icon": "fa-gauge-high",
+        "destructive": False,
+        "args": [],
+    },
+    "test_ocr_pipeline": {
+        "name": "Test OCR Pipeline",
+        "script": "test_ocr_pipeline.py",
+        "category": "test",
+        "description": "Tes pipeline OCR penuh dengan gambar sintetis (PaddleOCR + AI).",
+        "icon": "fa-font",
+        "destructive": False,
+        "args": [],
+    },
+}
+
+
+@bp.route("/api/agent_tools", methods=["GET"])
+@admin_required
+def api_agent_tools_list():
+    """Return list of available agent tools (scripts in /tools folder)."""
+    return jsonify({"status": "success", "tools": AGENT_TOOLS})
+
+
+@bp.route("/api/agent_tools/run", methods=["POST"])
+@admin_required
+@csrf_required
+@rate_limit(limit_name="ai_test")
+def api_agent_tools_run():
+    """Run a specific agent tool script and return captured stdout/stderr."""
+    import app.config as cfg
+
+    data = request.get_json(silent=True) or {}
+    tool_id = data.get("tool")
+    if tool_id not in AGENT_TOOLS:
+        return jsonify({"status": "error", "message": "Unknown tool"}), 400
+
+    tool = AGENT_TOOLS[tool_id]
+    script_path = os.path.join(cfg.BASE_DIR, "tools", tool["script"])
+    if not os.path.isfile(script_path):
+        return jsonify({"status": "error", "message": f"Script not found: {tool['script']}"}), 404
+
+    # Build command: <python> <script> [args...]
+    cmd = [sys.executable, script_path]
+
+    # Parse args from request based on tool's arg config
+    req_args = data.get("args") or {}
+    for arg_cfg in tool.get("args", []):
+        arg_name = arg_cfg["name"]
+        arg_val = req_args.get(arg_name, arg_cfg.get("default"))
+        if arg_cfg["type"] == "bool":
+            if arg_val:
+                cmd.append(arg_cfg["flag"])
+        elif arg_cfg["type"] == "number":
+            if arg_val is not None:
+                try:
+                    num_val = int(arg_val)
+                    if "min" in arg_cfg:
+                        num_val = max(arg_cfg["min"], num_val)
+                    if "max" in arg_cfg:
+                        num_val = min(arg_cfg["max"], num_val)
+                    cmd.extend([arg_cfg["flag"], str(num_val)])
+                except (TypeError, ValueError):
+                    pass
+
+    # Run synchronously with a generous timeout (some tools call AI vision)
+    try:
+        proc = _subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=cfg.BASE_DIR,
+        )
+        output = proc.stdout or ""
+        if proc.stderr:
+            output += ("\n--- STDERR ---\n" + proc.stderr) if output else proc.stderr
+
+        # Truncate very long outputs so we don't blow up the JSON response
+        if len(output) > 20000:
+            output = output[-20000:] + "\n... (truncated)"
+
+        return jsonify({
+            "status": "success",
+            "tool": tool_id,
+            "exit_code": proc.returncode,
+            "command": " ".join([os.path.basename(sys.executable), tool["script"]] + cmd[2:]),
+            "output": output if output.strip() else "(no output)",
+        })
+    except _subprocess.TimeoutExpired:
+        return jsonify({"status": "error", "message": "Tool timed out (180s limit)"}), 408
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ==============================================================
+# Vehicle Identity Agent Control (pause/resume — no API calls = no token usage)
+# ==============================================================
+
+@bp.route("/api/agent/vehicle_identity", methods=["GET"])
+@admin_required
+def api_agent_vehicle_identity_status():
+    """Return current status of the Vehicle Identity Agent."""
+    try:
+        from app.services.vehicle_agent import is_agent_paused, _agent_running
+        return jsonify({
+            "status": "success",
+            "running": _agent_running,
+            "paused": is_agent_paused(),
+            "description": (
+                "Vehicle Identity Agent fills missing plate numbers, vehicle make/model, and color "
+                "from evidence images using AI vision. When PAUSED, it does NOT call the AI API — "
+                "no token is consumed."
+            ),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/api/agent/vehicle_identity", methods=["POST"])
+@admin_required
+def api_agent_vehicle_identity_control():
+    """Pause or resume the Vehicle Identity Agent to control AI token usage."""
+    data = request.get_json(silent=True) or {}
+    action = str(data.get("action") or "").strip().lower()
+
+    try:
+        from app.services.vehicle_agent import pause_agent, resume_agent, is_agent_paused, _agent_running
+
+        if action == "pause":
+            if not _agent_running:
+                return jsonify({"status": "error", "message": "Agent is not running"}), 400
+            if is_agent_paused():
+                return jsonify({"status": "success", "message": "Already paused", "paused": True})
+            pause_agent()
+            return jsonify({"status": "success", "message": "Agent paused — AI API calls suspended", "paused": True})
+
+        elif action == "resume":
+            if not _agent_running:
+                return jsonify({"status": "error", "message": "Agent is not running"}), 400
+            if not is_agent_paused():
+                return jsonify({"status": "success", "message": "Already running", "paused": False})
+            resume_agent()
+            return jsonify({"status": "success", "message": "Agent resumed — AI API calls active", "paused": False})
+
+        else:
+            return jsonify({"status": "error", "message": "Unknown action. Use 'pause' or 'resume'."}), 400
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # ==============================================================
@@ -5370,5 +6180,135 @@ def api_violations_clear():
         conn.commit()
         conn.close()
         return jsonify({"status": "success", "message": "All violations cleared"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/api/violations/backfill_vehicle_id", methods=["POST"])
+@admin_required
+def api_violations_backfill():
+    """Backfill vehicle identity (plate, make/model, color) for violations missing this info.
+    
+    Reads the evidence image from disk and sends to AI vision model.
+    Processes up to 20 violations per call to avoid timeouts.
+    """
+    import threading
+
+    limit = int(request.args.get("limit") or 20)
+
+    def _backfill_worker(violation_ids_and_paths):
+        import cv2
+        from app.services.ai_ocr import ai_identify_vehicle, ai_read_plate_from_image
+        from app.database import update_violation_plate, update_violation_field
+
+        for vid, evidence_path, camera_id in violation_ids_and_paths:
+            try:
+                img_path = os.path.join(EVIDENCE_DIR, evidence_path.replace("/", os.sep))
+                if not os.path.isfile(img_path):
+                    continue
+
+                img = cv2.imread(img_path)
+                if img is None:
+                    continue
+
+                # Try plate reading
+                plate_result = ai_read_plate_from_image(img)
+                if plate_result and plate_result[0]:
+                    plate_text, plate_conf = plate_result
+                    try:
+                        conn = get_db_connection(timeout_s=5)
+                        from app.database import _execute
+                        _execute(conn, "UPDATE violations SET plate_text=?, plate_confidence=? WHERE id=?",
+                                 (plate_text, float(plate_conf), vid))
+                        conn.commit()
+                        conn.close()
+                    except Exception:
+                        pass
+
+                # Try vehicle identification
+                info = ai_identify_vehicle(img)
+                if info:
+                    notes_parts = []
+                    if info.get('vehicle_type') and info['vehicle_type'] not in ('Unknown', 'N/A', ''):
+                        notes_parts.append(f"Jenis: {info['vehicle_type']}")
+                    if info.get('company') and info['company'] not in ('Private', 'Unknown', 'N/A', ''):
+                        notes_parts.append(f"Perusahaan: {info['company']}")
+                    if info.get('make_model') and info['make_model'] not in ('Unknown', 'N/A', ''):
+                        notes_parts.append(f"Merek/Model: {info['make_model']}")
+                    if info.get('color') and info['color'] not in ('Unknown', 'N/A', ''):
+                        notes_parts.append(f"Warna: {info['color']}")
+                    if info.get('registration_area') and info['registration_area'] not in ('Unknown', 'N/A', ''):
+                        notes_parts.append(f"Daerah: {info['registration_area']}")
+
+                    # Update vehicle_class
+                    vtype = info.get('vehicle_type', '')
+                    if vtype and vtype not in ('Unknown', 'N/A', ''):
+                        try:
+                            conn = get_db_connection(timeout_s=5)
+                            from app.database import _execute
+                            _execute(conn, "UPDATE violations SET vehicle_class=? WHERE id=?", (vtype, vid))
+                            conn.commit()
+                            conn.close()
+                        except Exception:
+                            pass
+
+                    # Update notes
+                    notes_str = " | ".join(notes_parts)
+                    if notes_str:
+                        try:
+                            conn = get_db_connection(timeout_s=5)
+                            from app.database import _execute
+                            _execute(conn, "UPDATE violations SET notes=? WHERE id=?", (notes_str, vid))
+                            conn.commit()
+                            conn.close()
+                        except Exception:
+                            pass
+
+                    # If AI found plate and violation doesn't have one yet
+                    ai_plate = info.get('plate', '')
+                    if ai_plate and ai_plate not in ('N/A', 'Unknown', '') and not plate_result[0]:
+                        try:
+                            conn = get_db_connection(timeout_s=5)
+                            from app.database import _execute
+                            _execute(conn, "UPDATE violations SET plate_text=?, plate_confidence=? WHERE id=? AND (plate_text IS NULL OR plate_text='')",
+                                     (ai_plate, 0.7, vid))
+                            conn.commit()
+                            conn.close()
+                        except Exception:
+                            pass
+
+                    print(f"[BACKFILL] id={vid} | {notes_str}")
+
+            except Exception as e:
+                print(f"[BACKFILL] id={vid} | ERROR: {e}")
+
+    try:
+        # Find violations without notes (no vehicle identity yet)
+        conn = get_db_connection()
+        from app.database import _execute
+        c = _execute(conn,
+            "SELECT id, evidence_path, camera_id FROM violations WHERE (notes IS NULL OR notes = '') AND evidence_path IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+        rows = c.fetchall()
+        conn.close()
+
+        if hasattr(rows[0], 'keys') if rows else False:
+            violations = [(r['id'], r['evidence_path'], r['camera_id']) for r in rows]
+        else:
+            violations = [(dict(r)['id'], dict(r)['evidence_path'], dict(r)['camera_id']) for r in rows]
+
+        if not violations:
+            return jsonify({"status": "success", "message": "No violations need backfilling", "count": 0})
+
+        # Run in background thread
+        t = threading.Thread(target=_backfill_worker, args=(violations,), daemon=True)
+        t.start()
+
+        return jsonify({
+            "status": "success",
+            "message": f"Backfilling {len(violations)} violations in background",
+            "count": len(violations),
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

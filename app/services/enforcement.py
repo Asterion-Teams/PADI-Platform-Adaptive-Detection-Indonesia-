@@ -46,6 +46,7 @@ from app.config import (
     CLASS_CAR,
     CLASS_MOTORCYCLE,
     CLASS_BUS,
+    CLASS_TRUCK,
 )
 import app.config as app_config
 from app.database import (
@@ -53,6 +54,7 @@ from app.database import (
     insert_violation,
 )
 from app.services.anpr import recognize_plate
+from app.services.anpr_enhanced import preprocess_sharpen, preprocess_denoise, preprocess_adaptive_clahe, preprocess_combo_heavy_clahe_sharpen
 
 
 # -------------------------------------------------------------------
@@ -157,18 +159,54 @@ def _track_motion_span(st) -> float:
 
 
 def _looks_like_vehicle_box(box, class_id) -> bool:
+    """Check if a bounding box looks like a vehicle, not a barrier/portal/other object.
+    
+    Applies strict size, aspect ratio, and shape filters to reject:
+    - Portals, barriers, gates (tall and narrow or very wide and flat)
+    - Signs, poles, people, etc.
+    """
     x1, y1, x2, y2 = box
     bw = abs(x2 - x1)
     bh = abs(y2 - y1)
     if bw <= 0 or bh <= 0:
         return False
-
-    aspect = bw / max(1.0, bh)
+    
+    area = bw * bh
+    aspect = bw / max(1.0, bh)  # width / height
+    
+    # REJECT: Object is too small to be a vehicle
+    if bw < 50 or bh < 40 or area < 4000:
+        return False
+    
+    # REJECT: Object is too TALL and NARROW (likely a portal, barrier, gate, pole)
+    # A typical vehicle is wider than tall or roughly square
+    if aspect < 0.35:
+        return False
+    
+    # REJECT: Object is too WIDE and FLAT (likely a barrier, fence, or road marking)
+    # A typical vehicle has some height
+    if aspect > 5.5:
+        return False
+    
+    # REJECT: Very small area even if dimensions pass (likely a sign or pole)
+    if area < 5000:
+        return False
+    
+    # Per-class specific checks
     if class_id == CLASS_MOTORCYCLE:
-        return 0.28 <= aspect <= 3.5
+        # Motorcycles are smaller and can be taller than cars
+        return 0.28 <= aspect <= 3.5 and area >= 2000 and bw >= 30 and bh >= 25
     if class_id == CLASS_BUS:
-        return 0.55 <= aspect <= 5.0
-    return 0.45 <= aspect <= 4.5
+        # Buses are large and wide
+        return 0.55 <= aspect <= 6.0 and area >= 15000 and bw >= 100
+    if class_id == CLASS_CAR:
+        # Cars are roughly 1.5-2.5x wider than tall
+        return 0.55 <= aspect <= 4.0 and area >= 4000 and bw >= 50 and bh >= 40
+    if class_id == CLASS_TRUCK:
+        return 0.45 <= aspect <= 5.0 and area >= 8000 and bw >= 60
+    
+    # Default: standard vehicle shape
+    return 0.45 <= aspect <= 4.5 and area >= 5000 and bw >= 50 and bh >= 40
 
 
 def _has_vehicle_texture(frame_bgr, box) -> bool:
@@ -213,6 +251,7 @@ class _TrackViolationState:
         "track_id", "zone_id", "first_seen_ts", "last_seen_ts",
         "first_box", "last_box", "positions", "logged_until",
         "plate", "plate_conf", "_last_anpr_attempt", "class_id",
+        "vehicle_info",
     )
 
     def __init__(self, track_id, zone_id, timestamp, box, class_id=None):
@@ -230,6 +269,75 @@ class _TrackViolationState:
         self.plate = None
         self.plate_conf = 0.0
         self._last_anpr_attempt = 0.0
+        self.vehicle_info = None  # Vehicle identity with confidence scores
+
+
+# -------------------------------------------------------------------
+# -------------------------------------------------------------------
+# Module-level worker functions (avoid closure issues with Python 3.12)
+# -------------------------------------------------------------------
+
+def _anpr_fallback_worker(state, frame, box, cam_id, key_ref, cam_name):
+    """Background ANPR worker — runs PaddleOCR as fallback."""
+    try:
+        from app.services.anpr import recognize_plate
+        plate, conf, eng = recognize_plate(
+            frame, box,
+            region_hint=cam_name,
+            seed=f"{cam_id}:{key_ref}:fallback",
+        )
+        if plate and conf >= 0.15 and eng != "simulated":
+            state.plate = plate
+            state.plate_conf = float(conf)
+            print(f"[ANPR-ASYNC] Track {key_ref} | plate={plate} | conf={conf:.2f} | engine={eng}")
+            from app.database import update_violation_plate
+            update_violation_plate(cam_id, time.time() - 120, plate, conf, only_if_null=True)
+    except Exception as e:
+        print(f"[ANPR-ASYNC] Track {key_ref} | ERROR: {e}")
+
+
+def _vehicle_id_worker(state, frame, box, cam_id, key_ref):
+    """Background vehicle identification worker — uses AI vision."""
+    try:
+        from app.services.ai_ocr import ai_identify_vehicle
+        x1, y1, x2, y2 = [int(v) for v in box]
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        vehicle_crop = frame[y1:y2, x1:x2]
+        if vehicle_crop.size > 0 and vehicle_crop.shape[0] > 30:
+            info = ai_identify_vehicle(vehicle_crop)
+            if info:
+                state.vehicle_info = info
+                notes_parts = []
+                if info.get('vehicle_type') and info['vehicle_type'] not in ('Unknown', 'N/A', ''):
+                    notes_parts.append(f"Jenis: {info['vehicle_type']}")
+                if info.get('company') and info['company'] not in ('Private', 'Unknown', 'N/A', ''):
+                    notes_parts.append(f"Perusahaan: {info['company']}")
+                if info.get('make_model') and info['make_model'] not in ('Unknown', 'N/A', ''):
+                    notes_parts.append(f"Merek/Model: {info['make_model']}")
+                if info.get('color') and info['color'] not in ('Unknown', 'N/A', ''):
+                    notes_parts.append(f"Warna: {info['color']}")
+                if info.get('registration_area') and info['registration_area'] not in ('Unknown', 'N/A', ''):
+                    notes_parts.append(f"Daerah: {info['registration_area']}")
+                ai_plate = info.get('plate', '')
+                if ai_plate and ai_plate != 'N/A' and 'unknown' not in ai_plate.lower():
+                    notes_parts.append(f"Plat: {ai_plate}")
+                    if not state.plate:
+                        state.plate = ai_plate
+                        state.plate_conf = 0.7
+                        from app.database import update_violation_plate
+                        update_violation_plate(cam_id, time.time() - 120, ai_plate, 0.7, only_if_null=True)
+                if info.get('vehicle_type') and info['vehicle_type'] not in ('Unknown', 'N/A', ''):
+                    from app.database import update_violation_field
+                    update_violation_field(cam_id, time.time() - 120, "vehicle_class", info['vehicle_type'])
+                notes_str = " | ".join(notes_parts)
+                if notes_str:
+                    from app.database import update_violation_field
+                    update_violation_field(cam_id, time.time() - 120, "notes", notes_str)
+                    print(f"[VEHICLE-ID] Track {key_ref} | {notes_str}")
+    except Exception as e:
+        print(f"[VEHICLE-ID] Track {key_ref} | ERROR: {e}")
 
 
 # -------------------------------------------------------------------
@@ -260,6 +368,11 @@ class EnforcementEngine:
         self._tracked = {}
         self._last_violation_ids = []
         self._last_violation_lock = threading.Lock()
+        # Frame buffer for smart capture: keep recent frames for best-quality ANPR
+        # Stores (timestamp, frame) tuples, keeps last 5 frames
+        self._frame_buffer = []
+        self._frame_buffer_lock = threading.Lock()
+        self._max_buffer_frames = 5
 
     # ---------- Zone management ----------
 
@@ -327,6 +440,18 @@ class EnforcementEngine:
         if not tracks:
             return []
 
+        # Store frame in buffer for smart capture (best frame selection)
+        if frame_bgr is not None and is_inference_frame:
+            with self._frame_buffer_lock:
+                # Store timestamp + frame copy (need copy to avoid reference issues)
+                try:
+                    self._frame_buffer.append((timestamp, frame_bgr.copy()))
+                except Exception:
+                    pass
+                # Keep only last N frames
+                if len(self._frame_buffer) > self._max_buffer_frames:
+                    self._frame_buffer = self._frame_buffer[-self._max_buffer_frames:]
+
         frame_h, frame_w = 0, 0
         if frame_bgr is not None:
             frame_h, frame_w = frame_bgr.shape[:2]
@@ -342,20 +467,24 @@ class EnforcementEngine:
             
             # Only process tracks that were detected THIS frame
             track_age = abs(timestamp - float(t.get("last_seen") or 0))
-            if track_age > 2.0:
-                continue  # Stale track — not detected recently
+            if track_age > 5.0:
+                continue  # Stale track — not detected recently (relaxed from 2.0 for background cameras)
             
             bw = abs(box[2] - box[0])
             bh = abs(box[3] - box[1])
             box_area = bw * bh
             
-            # SIZE FILTER: Filter out very small detections (noise/distant objects)
-            if bw < 50 or bh < 35 or box_area < 3000:
+            # SIZE FILTER: Filter out small/noisy detections
+            # Reduced thresholds for distant CCTV cameras (elevated/top-down view)
+            min_bw = 25
+            min_bh = 20
+            min_area = 800
+            if bw < min_bw or bh < min_bh or box_area < min_area:
                 continue
             
-            # Aspect ratio check
+            # Aspect ratio check - reasonable range for vehicles
             aspect = bw / max(1, bh)
-            if aspect < 0.2 or aspect > 8.0:
+            if aspect < 0.2 or aspect > 8.0:  # Tighter range to filter noise
                 continue
 
             cx, cy = _bbox_center(box)
@@ -372,13 +501,34 @@ class EnforcementEngine:
                 
                 # Check if center point is inside zone
                 if _point_in_geometry(cx, cy, scaled_geom):
-                    if ztype in {ZONE_TYPE_BUSWAY, ZONE_TYPE_BICYCLE}:
-                        # Dynamic-lane violations should sit on the lane surface.
-                        # Requiring at least 2 lower anchor points avoids plang /
-                        # side fixtures that overlap the polygon only at the middle.
+                    if ztype == ZONE_TYPE_BUSWAY:
+                        # Busway: center is in zone — vehicle detected in busway!
+                        # Check if it's a bus (allowed in busway)
+                        track_cls = t.get("class_id")
+                        box_w_check = abs(box[2] - box[0])
+                        box_h_check = abs(box[3] - box[1])
+                        is_bus = (track_cls == CLASS_BUS and box_w_check * box_h_check > 80000)
+                        
+                        if not is_bus:
+                            # INSTANT BUSWAY VIOLATION — log immediately on first detection
+                            busway_key = (tid, zone_id)
+                            # Check cooldown: don't re-log same track
+                            if busway_key in self._tracked:
+                                st_existing = self._tracked[busway_key]
+                                if timestamp < st_existing.logged_until:
+                                    # Already logged, skip
+                                    pass
+                                else:
+                                    print(f"[BUSWAY-DETECT] Track {tid} | center=({cx:.0f},{cy:.0f}) IN zone {zone_id} | box={box}")
+                            else:
+                                print(f"[BUSWAY-DETECT] Track {tid} | center=({cx:.0f},{cy:.0f}) IN zone {zone_id} | box={box}")
+                    elif ztype == ZONE_TYPE_BICYCLE:
+                        # Bicycle lane: ULTRA-LENIENT - only 1 anchor OR center in zone
+                        # For instant detection of any vehicle in bicycle lane
                         anchor_hits = _count_points_in_geometry(_bbox_bottom_anchors(box), scaled_geom)
-                        if anchor_hits < 2:
-                            continue
+                        if anchor_hits < 1:
+                            # Still allow if center is detected (already true at this point)
+                            pass  # Center already checked above
                     key = (tid, zone_id)
                     active_track_zones.add(key)
                     vehicles_in_zone_count += 1
@@ -392,28 +542,82 @@ class EnforcementEngine:
                         if len(st.positions) > 200:
                             st.positions = st.positions[-200:]
                         
-                        # Early ANPR: try to read plate while vehicle is dwelling
-                        # (before violation threshold is reached)
-                        # Only attempt every ~8 seconds to avoid overloading OCR
-                        if (st.plate is None 
+                        # Early ANPR: try to read plate immediately when vehicle detected in zone
+                        # SENSITIVE MODE: Start ANPR immediately, not after 3 seconds
+                        # Use smart capture with deblurring for clearer OCR
+                        if (st.plate is None
                             and frame_bgr is not None
-                            and (st.last_seen_ts - st.first_seen_ts) >= 3.0
-                            and (timestamp - st._last_anpr_attempt) >= 8.0):
+                            and (timestamp - st._last_anpr_attempt) >= 2.0):  # Reduced from 8s to 2s
                             try:
-                                _plate, _conf, _eng = recognize_plate(
-                                    frame_bgr, box,
-                                    region_hint=self.camera_name,
-                                    seed=f"{self.camera_id}:{key}",
+                                # Smart capture: get enhanced crop for better OCR
+                                enhanced_crop, _ = _capture_best_frame_for_plate(
+                                    frame_bgr, box, timestamp, st.positions, self.camera_id, frame_buffer=self
                                 )
+                                _plate, _conf, _eng = None, 0.0, None
+                                if enhanced_crop is not None:
+                                    _plate, _conf, _eng = recognize_plate(
+                                        enhanced_crop, None,
+                                        region_hint=self.camera_name,
+                                        seed=f"{self.camera_id}:{key}:smart",
+                                    )
+                                if not (_plate and _conf >= 0.15 and _eng != "simulated"):
+                                    # Fallback: try original frame
+                                    _plate, _conf, _eng = recognize_plate(
+                                        frame_bgr, box,
+                                        region_hint=self.camera_name,
+                                        seed=f"{self.camera_id}:{key}:orig",
+                                    )
                                 st._last_anpr_attempt = timestamp
                                 if _plate and _conf >= 0.15 and _eng != "simulated":
                                     st.plate = _plate
                                     st.plate_conf = float(_conf)
+                                    # Update database with plate confidence
+                                    try:
+                                        from app.database import get_db_connection
+                                        conn = get_db_connection(timeout_s=5)
+                                        conn.execute(
+                                            "UPDATE violations SET plate_text=?, plate_confidence=? WHERE camera_id=? AND timestamp > ? AND plate_text IS NULL ORDER BY id DESC LIMIT 1",
+                                            (_plate, float(_conf), self.camera_id, time.time() - 60)
+                                        )
+                                        conn.commit()
+                                        conn.close()
+                                    except Exception:
+                                        pass
                                     print(f"[ANPR-EARLY] Track {tid} | plate={_plate} | conf={_conf:.2f} | engine={_eng}")
                             except Exception:
                                 st._last_anpr_attempt = timestamp
                     else:
+                        # --- REJECT NON-VEHICLE CLASSES IMMEDIATELY ---
+                        # This prevents portals, barriers, gates, signs, people, etc. from being tracked
                         track_cls = t.get("class_id")
+                        
+                        # Get all valid vehicle class IDs (from config)
+                        import app.config as _cfg
+                        valid_cls = set(_cfg.VEHICLE_CLASSES_COCO) | {v for v in _cfg.CLASS_MAPPING_COCO.values()}
+                        
+                        # If class_id is available, check if it's a valid vehicle class
+                        if track_cls is not None and track_cls not in valid_cls:
+                            # Class is known but not a vehicle - skip this detection
+                            # Common false positives: traffic signs, barriers, gates, poles
+                            continue
+                        
+                        # --- SIZE FILTER: Reject objects that are too small or wrong aspect ratio ---
+                        # RAISED thresholds for bicycle lane to reduce false positives
+                        bx1, by1, bx2, by2 = [int(float(v)) for v in box]
+                        bw = abs(bx2 - bx1)
+                        bh = abs(by2 - by1)
+                        obj_area = bw * bh
+                        obj_aspect = bw / max(1.0, bh)  # width / height
+                        
+                        # Minimum size threshold - RAISED to filter distant/noisy detections
+                        if bw < 45 or bh < 35 or obj_area < 2500:  # Increased from 30x25, 1500
+                            continue
+                        
+                        # Aspect ratio filter - reasonable range for vehicles
+                        if obj_aspect < 0.2 or obj_aspect > 8.0:  # Tighter than 0.15-10.0
+                            continue
+                        
+                        # --- PASSED ALL FILTERS: Create track state ---
                         self._tracked[key] = _TrackViolationState(tid, zone_id, timestamp, box, class_id=track_cls)
 
         # Step 2: Remove stale tracks (vehicle left or tracker lost it)
@@ -427,10 +631,22 @@ class EnforcementEngine:
             n_tracks = len(tracks)
             n_tracked = len(self._tracked)
             n_zones = len(self.zones)
+            
+            # Debug: count bicycle zones specifically
+            bike_zones = [z for z in self.zones if z.get("zone_type") == ZONE_TYPE_BICYCLE]
+            
             print(f"[ENFORCE-STATUS] {self.camera_name} | "
-                  f"frame={frame_w}x{frame_h} | zones={n_zones} | "
+                  f"frame={frame_w}x{frame_h} | zones={n_zones} | bike_zones={len(bike_zones)} | "
                   f"yolo_tracks={n_tracks} | in_zone={vehicles_in_zone_count} | "
                   f"tracked_states={n_tracked}")
+            
+            # Log all active tracks that are in bicycle zones
+            for z in bike_zones:
+                zid = int(z["id"])
+                zname = z.get("name", zid)
+                geom = z.get("geometry")
+                if geom:
+                    print(f"[ENFORCE-BICYCLE-DEBUG] Zone '{zname}' | geometry_points={len(geom)}")
 
         for key, st in self._tracked.items():
             if key not in active_track_zones:
@@ -449,234 +665,351 @@ class EnforcementEngine:
 
         # Step 3: Check for violations
         created = []
-        for key, st in list(self._tracked.items()):
-            if timestamp < st.logged_until:
-                continue
-
-            dwell = st.last_seen_ts - st.first_seen_ts
-            zone_id = st.zone_id
-            zone = next((z for z in self.zones if int(z["id"]) == zone_id), None)
-            if not zone:
-                continue
-            ztype = zone.get("zone_type")
-            geom = zone.get("geometry")
-            scaled_geom = self._scale_geometry(geom, zone, frame_w, frame_h) if geom is not None else None
-
-            # Final bbox size validation at violation time
-            bx1, by1, bx2, by2 = st.last_box
-            vw = abs(bx2 - bx1)
-            vh = abs(by2 - by1)
-            if vw < 60 or vh < 45 or (vw * vh) < 5000:
-                continue
-
-            track_data_now = tracks.get(st.track_id)
-            track_cls_id = st.class_id
-            if track_data_now and track_data_now.get("class_id") is not None:
-                track_cls_id = track_data_now.get("class_id")
-            if track_cls_id is None:
-                track_cls_id = CLASS_CAR
-
-            # Reject clearly non-vehicle boxes before they become persisted
-            # violations. This catches tall plang-like detections and flat puddles.
-            if not _looks_like_vehicle_box(st.last_box, track_cls_id):
-                continue
-
-            # Check if vehicle is truly stationary
-            is_stationary = self._is_stationary(st)
-
-            # Debug: log tracking progress for vehicles dwelling in zones
-            if dwell >= 10.0 and len(st.positions) >= 3 and int(dwell) % 15 == 0:
-                print(f"[ENFORCE] Track {key[0]} in zone '{zone.get('name', zone_id)}' ({ztype}) | "
-                      f"dwell={dwell:.0f}s | stationary={is_stationary} | "
-                      f"bbox={vw}x{vh} | samples={len(st.positions)}")
-
-            violation_type = None
-            if ztype == ZONE_TYPE_NO_PARKING:
-                threshold = float(app_config.ILLEGAL_PARKING_MIN_SECONDS) + float(app_config.ILLEGAL_PARKING_GRACE_SECONDS)
-                if dwell >= threshold and is_stationary:
-                    violation_type = VIOLATION_ILLEGAL_PARKING
-            elif ztype == ZONE_TYPE_BUSWAY:
-                # Busway violation: ANY vehicle in busway zone for > threshold
-                # EXCEPT buses — buses are ALLOWED to use the busway lane
-                # Does NOT require stationary — moving through busway is also a violation
-                
-                # Check class_id from multiple sources to avoid misclassification
-                if track_data_now:
-                    current_cls = track_data_now.get("class_id")
-                    if current_cls == CLASS_BUS:
-                        track_cls_id = CLASS_BUS
-                
-                # Size-based heuristic: Buses are MUCH larger than cars/motorcycles
-                # Any large vehicle in a BUSWAY lane is almost certainly a bus
-                # Thresholds are intentionally low to catch buses from various angles
-                box_w = abs(st.last_box[2] - st.last_box[0])
-                box_h = abs(st.last_box[3] - st.last_box[1])
-                box_area = box_w * box_h
-                
-                # A bus in frame is typically:
-                # - Area > 20000px (even from far away / angled view)
-                # - Width > 120px OR Height > 120px (bus is large in at least one dimension)
-                # - Much larger than a motorcycle (area < 8000) or car (area < 15000 typically)
-                is_large_vehicle = (
-                    box_area > 20000 or
-                    (box_w > 120 and box_h > 120) or
-                    (box_w > 200) or
-                    (box_h > 200)
-                )
-                if is_large_vehicle:
-                    track_cls_id = CLASS_BUS
-                
-                if track_cls_id == CLASS_BUS:
-                    continue  # Bus is allowed in busway — skip
-                if scaled_geom is not None:
-                    anchor_hits = _count_points_in_geometry(_bbox_bottom_anchors(st.last_box), scaled_geom)
-                    if anchor_hits < 2:
-                        continue
-                motion_span = _track_motion_span(st)
-                if motion_span < 12.0 and not _has_vehicle_texture(frame_bgr, st.last_box):
+        try:
+            for tk, st in list(self._tracked.items()):
+                if timestamp < st.logged_until:
                     continue
-                if is_stationary and dwell < max(4.0, float(app_config.DYNAMIC_LANE_MIN_SECONDS) + 2.0):
-                    continue
-                if dwell >= float(app_config.DYNAMIC_LANE_MIN_SECONDS):
-                    violation_type = VIOLATION_BUSWAY
-            elif ztype == ZONE_TYPE_BICYCLE:
-                # Bicycle lane: ANY motorized vehicle in bicycle zone for > threshold
-                if scaled_geom is not None:
-                    anchor_hits = _count_points_in_geometry(_bbox_bottom_anchors(st.last_box), scaled_geom)
-                    if anchor_hits < 2:
-                        continue
-                motion_span = _track_motion_span(st)
-                if motion_span < 12.0 and not _has_vehicle_texture(frame_bgr, st.last_box):
-                    continue
-                if is_stationary and dwell < max(4.0, float(app_config.DYNAMIC_LANE_MIN_SECONDS) + 2.0):
-                    continue
-                if dwell >= float(app_config.DYNAMIC_LANE_MIN_SECONDS):
-                    violation_type = VIOLATION_BICYCLE_LANE
-            elif ztype == ZONE_TYPE_WRONG_WAY:
-                # Wrong-way / lawan arah: vehicle moving AGAINST the allowed direction
-                # Zone stores "allowed_direction" as angle (degrees, 0=right, 90=down, etc.)
-                # If vehicle's movement direction differs by > 150° from allowed, it's wrong-way
-                # Require at least 5 positions and 4s dwell to avoid flagging turning vehicles
-                if dwell >= float(app_config.WRONG_WAY_MIN_SECONDS) and len(st.positions) >= 5:
-                    is_wrong = self._check_wrong_way(st, zone)
-                    if is_wrong:
-                        violation_type = VIOLATION_WRONG_WAY
 
-            if violation_type is None:
-                continue
-
-            # --- Violation confirmed ---
-            print(f"[VIOLATION] {self.camera_name} | Track {key[0]} | "
-                  f"{violation_type} | dwell={dwell:.0f}s | bbox={vw}x{vh}")
-
-            # ANPR — aggressive plate reading with multiple attempts
-            if st.plate is None and frame_bgr is not None:
                 try:
-                    fh, fw = frame_bgr.shape[:2]
-                    bx1, by1, bx2, by2 = [int(v) for v in st.last_box]
-                    box_w = bx2 - bx1
-                    box_h = by2 - by1
-                    
-                    # For small vehicles (far from camera), use much larger crop area
-                    # Small = bbox < 150px in either dimension
-                    if box_w < 150 or box_h < 150:
-                        # Very aggressive padding (100%) for small vehicles
-                        pad_x = max(box_w, 80)
-                        pad_y = max(box_h, 80)
-                    else:
-                        # Normal padding (50%) for larger vehicles
-                        pad_x = int(box_w * 0.5)
-                        pad_y = int(box_h * 0.5)
-                    
-                    # Attempt 1: exact vehicle bbox (the same red box shown to operator)
-                    plate, conf, _engine = recognize_plate(
-                        frame_bgr, st.last_box,
-                        region_hint=self.camera_name,
-                        seed=f"{self.camera_id}:{key}:tight",
-                    )
-                    if plate and conf >= 0.15 and _engine != "simulated":
-                        st.plate = plate
-                        st.plate_conf = float(conf)
-                        print(f"[ANPR] Track {key[0]} | plate={plate} | conf={conf:.2f} | engine={_engine}")
-                    else:
-                        # Attempt 2: enlarged context as fallback for small/far vehicles
-                        enlarged_box = [
-                            max(0, bx1 - pad_x), max(0, by1 - pad_y),
-                            min(fw, bx2 + pad_x), min(fh, by2 + pad_y)
-                        ]
-                        plate2, conf2, _engine2 = recognize_plate(
-                            frame_bgr, enlarged_box,
-                            region_hint=self.camera_name,
-                            seed=f"{self.camera_id}:{key}:wide",
+                    dwell = st.last_seen_ts - st.first_seen_ts
+                    zone_id = st.zone_id
+                    zone = next((z for z in self.zones if int(z["id"]) == zone_id), None)
+                    if not zone:
+                        continue
+                    ztype = zone.get("zone_type")
+                    geom = zone.get("geometry")
+                    scaled_geom = self._scale_geometry(geom, zone, frame_w, frame_h) if geom is not None else None
+
+                    # Final bbox size validation at violation time
+                    bx1, by1, bx2, by2 = st.last_box
+                    vw = abs(bx2 - bx1)
+                    vh = abs(by2 - by1)
+                    if vw < 60 or vh < 45 or (vw * vh) < 5000:
+                        continue
+
+                    track_data_now = tracks.get(st.track_id)
+                    track_cls_id = st.class_id
+                    if track_data_now and track_data_now.get("class_id") is not None:
+                        track_cls_id = track_data_now.get("class_id")
+                    if track_cls_id is None:
+                        track_cls_id = CLASS_CAR
+
+                    # Reject clearly non-vehicle boxes before they become persisted
+                    # violations. This catches tall plang-like detections and flat puddles.
+                    if not _looks_like_vehicle_box(st.last_box, track_cls_id):
+                        continue
+
+                    # Check if vehicle is truly stationary
+                    is_stationary = self._is_stationary(st)
+
+                    # Debug: log tracking progress for vehicles dwelling in zones
+                    if dwell >= 10.0 and len(st.positions) >= 3 and int(dwell) % 15 == 0:
+                        print(f"[ENFORCE] Track {tk[0]} in zone '{zone.get('name', zone_id)}' ({ztype}) | "
+                              f"dwell={dwell:.0f}s | stationary={is_stationary} | "
+                              f"bbox={vw}x{vh} | samples={len(st.positions)}")
+
+                    violation_type = None
+                    if ztype == ZONE_TYPE_NO_PARKING:
+                        threshold = float(app_config.ILLEGAL_PARKING_MIN_SECONDS) + float(app_config.ILLEGAL_PARKING_GRACE_SECONDS)
+                        if dwell >= threshold and is_stationary:
+                            violation_type = VIOLATION_ILLEGAL_PARKING
+                    elif ztype == ZONE_TYPE_BUSWAY:
+                        # Busway violation: motorized vehicles in busway lane for sufficient duration.
+                        # EXCEPT buses — buses ARE ALLOWED to use the busway lane.
+                        #
+                        # DETECTION STRATEGY (balanced responsiveness + accuracy):
+                        # - Moving vehicles (speed > 40 px/s, traveled > 50px): 3s minimum
+                        # - Slow-moving (20-40 px/s): 5s minimum
+                        # - Stationary/nearly stationary (< 20 px/s): 8s minimum
+                        # - Must have ≥ 3 consecutive zone detections before triggering
+                        #
+                        # Rationale: 3s is enough to confirm it's not a brief lane-crossing
+                        # or detection jitter. 40 px/s = ~2.3 km/h in a 1920px frame,
+                        # which filters out noise while catching real violators.
+
+                        # Check class_id from multiple sources to avoid misclassification
+                        if track_data_now:
+                            current_cls = track_data_now.get("class_id")
+                            if current_cls == CLASS_BUS:
+                                track_cls_id = CLASS_BUS
+
+                        # Size-based heuristic: Only VERY large vehicles are buses
+                        # TransJakarta buses are typically 300+ px wide in CCTV
+                        box_w = abs(st.last_box[2] - st.last_box[0])
+                        box_h = abs(st.last_box[3] - st.last_box[1])
+                        box_area = box_w * box_h
+
+                        is_bus_sized = (
+                            box_area > 80000 or
+                            (box_w > 300 and box_h > 150) or
+                            (box_w > 400)
                         )
-                        if plate2 and conf2 >= 0.15 and _engine2 != "simulated":
-                            st.plate = plate2
-                            st.plate_conf = float(conf2)
-                            print(f"[ANPR-WIDE] Track {key[0]} | plate={plate2} | conf={conf2:.2f} | engine={_engine2}")
+                        if is_bus_sized and track_cls_id == CLASS_BUS:
+                            continue  # Bus is allowed in busway — skip
+                        if track_cls_id == CLASS_BUS and is_bus_sized:
+                            continue
+
+                        # Ghost detection filter: bbox must contain real vehicle texture
+                        # Reject tiny or very dark/uniform patches (empty road, noise)
+                        if frame_bgr is not None:
+                            try:
+                                bx1v, by1v, bx2v, by2v = [int(v) for v in st.last_box]
+                                fh_v, fw_v = frame_bgr.shape[:2]
+                                bx1v = max(0, bx1v); by1v = max(0, by1v)
+                                bx2v = min(fw_v, bx2v); by2v = min(fh_v, by2v)
+                                crop = frame_bgr[by1v:by2v, bx1v:bx2v]
+                                if crop.size == 0 or crop.shape[0] < 20 or crop.shape[1] < 20:
+                                    continue
+                                # Check if there's enough contrast (real object, not empty road)
+                                import cv2 as _cv2
+                                gray = _cv2.cvtColor(crop, _cv2.COLOR_BGR2GRAY)
+                                std_dev = float(gray.std())
+                                if std_dev < 8.0:  # Very uniform patch = empty road/noise
+                                    continue
+                            except Exception:
+                                pass
+
+                        # Require minimum consecutive detections before triggering
+                        # This filters out detection jitter / brief crossing
+                        # Use config value
+                        min_zone_hits = int(getattr(app_config, 'BUSWAY_MIN_ZONE_HITS', 3))
+                        zone_hit_count = 0
+                        check_len = min(len(st.positions), 8)
+                        for i in range(check_len):
+                            _, tcx, tcy = st.positions[-(i + 1)]
+                            if _point_in_geometry(tcx, tcy, scaled_geom):
+                                zone_hit_count += 1
+                        if zone_hit_count < min_zone_hits:
+                            # Not enough consecutive zone detections — skip
+                            continue
+
+                        # SPEED & DISTANCE ANALYSIS
+                        speed_px_s = 0.0
+                        total_distance = 0.0
+                        speeds = []
+                        if len(st.positions) >= 3:
+                            try:
+                                # Average speed over last 3 segments for stability (not just 1 frame)
+                                for i in range(1, min(4, len(st.positions))):
+                                    pts_prev = st.positions[-(i + 1)]
+                                    pts_curr = st.positions[-i]
+                                    dt = abs(pts_curr[0] - pts_prev[0])
+                                    if dt > 0.001:
+                                        seg_dist = math.hypot(pts_curr[1] - pts_prev[1], pts_curr[2] - pts_prev[2])
+                                        speeds.append(seg_dist / dt)
+                                if speeds:
+                                    speed_px_s = sum(speeds) / len(speeds)
+                                # Total distance traveled in zone
+                                first_ts, first_cx, first_cy = st.positions[0]
+                                last_ts, last_cx, last_cy = st.positions[-1]
+                                total_distance = math.hypot(last_cx - first_cx, last_cy - first_cy)
+                            except Exception:
+                                pass
+
+                        # Dwell requirement: adaptive based on speed, using config values
+                        # - Fast moving (40+ px/s, traveled >40px): FAST threshold
+                        # - Medium speed (20-40 px/s): MEDIUM threshold
+                        # - Slow/stationary (<20 px/s): SLOW threshold
+                        fast_speed = float(getattr(app_config, 'BUSWAY_FAST_SPEED_PX_S', 40.0))
+                        min_dist = float(getattr(app_config, 'BUSWAY_MIN_TRAVEL_DIST_PX', 40.0))
+                        if speed_px_s > fast_speed and total_distance > min_dist:
+                            violation_threshold = float(getattr(app_config, 'BUSWAY_FAST_MIN_SECONDS', 3.0))
+                        elif speed_px_s > 20.0:
+                            violation_threshold = float(getattr(app_config, 'BUSWAY_MEDIUM_MIN_SECONDS', 5.0))
                         else:
-                            print(f"[ANPR] Track {key[0]} | not readable (bbox={box_w}x{box_h})")
-                except Exception as anpr_err:
-                    print(f"[ANPR] Track {key[0]} | ERROR: {anpr_err}")
+                            violation_threshold = float(getattr(app_config, 'BUSWAY_SLOW_MIN_SECONDS', 8.0))
 
-            evidence_bbox = [int(v) for v in st.last_box]
-            evidence_rel = _save_evidence(
-                frame_bgr, evidence_bbox,
-                self.camera_id, timestamp, violation_type
-            )
+                        if dwell >= violation_threshold:
+                            print(f"[BUSWAY-VIOLATION] Track {tk[0]} | dwell={dwell:.1f}s | "
+                                  f"speed={speed_px_s:.0f}px/s | dist={total_distance:.0f}px | "
+                                  f"zone_hits={zone_hit_count}/{check_len} | threshold={violation_threshold}s")
+                            violation_type = VIOLATION_BUSWAY
+                    elif ztype == ZONE_TYPE_BICYCLE:
+                        # Bicycle lane: ANY motorized vehicle in bicycle zone
+                        # LESS SENSITIVE MODE: Require longer dwell time to reduce false positives
+                        # Check if vehicle center is in zone (more lenient than anchor)
+                        in_zone = _point_in_geometry(cx, cy, scaled_geom) if scaled_geom else False
+                        
+                        # Also check bottom anchors (lenient - only 1 anchor needed)
+                        anchor_hits = 0
+                        if scaled_geom:
+                            anchor_hits = _count_points_in_geometry(_bbox_bottom_anchors(box), scaled_geom)
+                        
+                        # Pass if center OR any anchor is in zone
+                        if not in_zone and anchor_hits < 1:
+                            continue
+                        
+                        # Check if we have an existing track for this vehicle
+                        key = (tid, zone_id)
+                        if key not in self._tracked:
+                            continue  # Skip - not an existing tracked vehicle
+                        
+                        st = self._tracked[key]
+                        
+                        # Debug: log what we're detecting
+                        track_cls = t.get("class_id", 0)
+                        print(f"[ENFORCE-BICYCLE] Track {tid} | class={track_cls} | "
+                              f"box={box} | center=({cx:.0f},{cy:.0f}) | in_zone={in_zone} | anchors={anchor_hits}")
+                        
+                        # BICYCLE LANE: Require minimum dwell time to avoid false positives
+                        # Use config value (default 1.0s in sensitive mode, 2.0s otherwise)
+                        bicycle_dwell_threshold = float(getattr(app_config, 'BICYCLE_LANE_MIN_SECONDS', 1.5))
+                        dwell = timestamp - st.first_seen_ts
+                        if dwell >= bicycle_dwell_threshold:
+                            print(f"[ENFORCE-BICYCLE] Track {tk[0]} | dwell={dwell:.1f}s | "
+                                  f"BICYCLE LANE VIOLATION | center_in_zone={in_zone} | anchors={anchor_hits}")
+                            violation_type = VIOLATION_BICYCLE_LANE
+                    elif ztype == ZONE_TYPE_WRONG_WAY:
+                        # Wrong-way / lawan arah: vehicle moving AGAINST the allowed direction
+                        if dwell >= float(app_config.WRONG_WAY_MIN_SECONDS) and len(st.positions) >= 8:
+                            violation_type = VIOLATION_WRONG_WAY
+                    
+                    if violation_type is None:
+                        continue  # Move to next track
+                    
+                    # --- Violation confirmed ---
+                    print(f"[VIOLATION] {self.camera_name} | Track {tk[0]} | "
+                          f"{violation_type} | dwell={dwell:.0f}s | bbox={vw}x{vh}")
+                    
+                    # Use CURRENT box position (from this inference frame) for evidence
+                    # This ensures the box is at the vehicle's actual position
+                    current_box = tracks.get(st.track_id, {}).get("box", st.last_box)
+                    evidence_bbox = [int(v) for v in current_box]
+                    
+                    # Use smart capture: deblur the full frame before saving evidence
+                    speed_px_s = 0.0
+                    if st.positions and len(st.positions) >= 2:
+                        try:
+                            last_ts, last_cx, last_cy = st.positions[-1]
+                            prev_ts, prev_cx, prev_cy = st.positions[-2]
+                            dt = abs(last_ts - prev_ts)
+                            if dt > 0.001:
+                                dist = math.hypot(last_cx - prev_cx, last_cy - prev_cy)
+                                speed_px_s = dist / dt
+                        except Exception:
+                            pass
+                    
+                    # Apply deblurring to full frame for evidence clarity
+                    enhanced_frame = frame_bgr
+                    if speed_px_s > 5.0:
+                        try:
+                            enhanced_frame = _apply_deblur(frame_bgr, evidence_bbox, speed_px_s) or frame_bgr
+                        except Exception:
+                            pass
+                    
+                    evidence_rel = _save_evidence(
+                        enhanced_frame, evidence_bbox, self.camera_id, timestamp, violation_type
+                    )
 
-            track_data = tracks.get(st.track_id)
-            cls_id = track_data.get("class_id") if track_data else st.class_id
-            # Fallback to stored class_id if track no longer exists
-            if cls_id is None:
-                cls_id = st.class_id
-            vehicle_class = _class_to_str(cls_id)
+                    track_data_now = tracks.get(st.track_id)
+                    cls_id = track_data_now.get("class_id") if track_data_now else st.class_id
+                    if cls_id is None:
+                        cls_id = st.class_id
+                    vehicle_class = _class_to_str(cls_id)
 
-            try:
-                vid = insert_violation(
-                    camera_id=self.camera_id,
-                    camera_name=self.camera_name,
-                    violation_type=violation_type,
-                    zone_type=ztype,
-                    timestamp=timestamp,
-                    duration_s=float(dwell),
-                    zone_id=zone_id,
-                    vehicle_class=vehicle_class,
-                    plate_text=st.plate,
-                    plate_confidence=float(st.plate_conf or 0),
-                    bbox=evidence_bbox,
-                    evidence_path=evidence_rel,
-                    lat=float(self.lat) if self.lat else None,
-                    lng=float(self.lng) if self.lng else None,
-                    status="pending",
-                )
-                print(f"[VIOLATION DB] id={vid} | {vehicle_class} | bbox={vw}x{vh}")
-            except Exception as e:
-                print(f"[VIOLATION ERROR] {e}")
-                vid = None
+                    # --- ANPR: Read plate BEFORE inserting violation ---
+                    # Run synchronously but ONLY use AI vision (fast, ~1s).
+                    # Skip slow PaddleOCR/EasyOCR path in sync mode.
+                    if st.plate is None and frame_bgr is not None:
+                        try:
+                            import app.config as _anpr_cfg
+                            if _anpr_cfg.AI_USE_FOR_ANPR and _anpr_cfg.AI_API_KEY:
+                                from app.services.ai_ocr import ai_read_plate_from_image
+                                x1v, y1v, x2v, y2v = [int(v) for v in current_box]
+                                h_f, w_f = frame_bgr.shape[:2]
+                                x1v, y1v = max(0, x1v), max(0, y1v)
+                                x2v, y2v = min(w_f, x2v), min(h_f, y2v)
+                                v_crop = frame_bgr[y1v:y2v, x1v:x2v]
+                                if v_crop.size > 0 and v_crop.shape[0] > 30:
+                                    ai_plate, ai_conf = ai_read_plate_from_image(v_crop)
+                                    if ai_plate and ai_conf > 0.3:
+                                        import re as _re_anpr
+                                        raw = _re_anpr.sub(r'[^A-Z0-9]', '', ai_plate.upper())
+                                        m = _re_anpr.match(r'^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$', raw)
+                                        if m:
+                                            st.plate = ai_plate
+                                            st.plate_conf = max(ai_conf, 0.85)
+                                            print(f"[ANPR-SYNC] Track {tk} | plate={ai_plate} | conf={st.plate_conf:.2f} | engine=ai_vision")
+                        except Exception as e:
+                            print(f"[ANPR-SYNC] Track {tk} | AI vision error: {e}")
+                    
+                    # Fallback: if AI vision failed, launch async PaddleOCR (won't block)
+                    if st.plate is None and frame_bgr is not None:
+                        import threading
+                        _fb_key = f"_anpr_fb_{tk}"
+                        if not getattr(self, _fb_key, False):
+                            setattr(self, _fb_key, True)
+                            _args = (st, frame_bgr.copy(), list(current_box), self.camera_id, str(tk), self.camera_name)
+                            threading.Thread(target=_anpr_fallback_worker, args=_args, daemon=True).start()
 
-            st.logged_until = timestamp + float(app_config.VIOLATION_COOLDOWN_SECONDS)
+                    # --- Vehicle identification via AI (async, won't block insert) ---
+                    if frame_bgr is not None and not getattr(st, 'vehicle_info', None):
+                        import threading
+                        _vk = f"_vid_running_{tk}"
+                        if not getattr(self, _vk, False):
+                            setattr(self, _vk, True)
+                            _args2 = (st, frame_bgr.copy(), list(current_box), self.camera_id, str(tk))
+                            threading.Thread(target=_vehicle_id_worker, args=_args2, daemon=True).start()
 
-            record = {
-                "id": vid,
-                "timestamp": timestamp,
-                "violation_type": violation_type,
-                "zone_type": ztype,
-                "zone_id": zone_id,
-                "zone_name": zone.get("name"),
-                "bbox": evidence_bbox,
-                "plate_text": st.plate,
-                "plate_confidence": st.plate_conf,
-                "duration_s": float(dwell),
-                "camera_id": self.camera_id,
-                "camera_name": self.camera_name,
-                "evidence_path": evidence_rel,
-                "vehicle_class": vehicle_class,
-            }
-            created.append(record)
-            with self._last_violation_lock:
-                self._last_violation_ids.append(record)
-                if len(self._last_violation_ids) > 20:
-                    self._last_violation_ids = self._last_violation_ids[-20:]
+                    # --- Plate-based deduplication ---
+                    # If we have a plate, check if this same plate was already logged recently
+                    if st.plate:
+                        try:
+                            from app.database import _execute, get_db_connection
+                            conn = get_db_connection(timeout_s=2)
+                            try:
+                                c = _execute(conn,
+                                    "SELECT id FROM violations WHERE camera_id=? AND plate_text=? AND timestamp > ? LIMIT 1",
+                                    (str(self.camera_id), st.plate, timestamp - float(app_config.VIOLATION_COOLDOWN_SECONDS))
+                                )
+                                existing = c.fetchone()
+                                if existing:
+                                    print(f"[DEDUP] Skip: plate {st.plate} already logged at {self.camera_name}")
+                                    st.logged_until = timestamp + float(app_config.VIOLATION_COOLDOWN_SECONDS)
+                                    continue
+                            finally:
+                                conn.close()
+                        except Exception:
+                            pass  # If dedup check fails, proceed with insert
+
+                    try:
+                        vid = insert_violation(
+                            camera_id=self.camera_id, camera_name=self.camera_name,
+                            violation_type=violation_type, zone_type=ztype,
+                            timestamp=timestamp, duration_s=float(dwell), zone_id=zone_id,
+                            vehicle_class=vehicle_class, plate_text=st.plate,
+                            plate_confidence=float(st.plate_conf or 0),
+                            bbox=evidence_bbox, evidence_path=evidence_rel,
+                            lat=float(self.lat) if self.lat else None,
+                            lng=float(self.lng) if self.lng else None,
+                            status="pending",
+                        )
+                        print(f"[VIOLATION DB] id={vid} | {vehicle_class} | plate={st.plate} | bbox={vw}x{vh}")
+                    except Exception as e:
+                        print(f"[VIOLATION ERROR] {e}")
+                        vid = None
+
+                    st.logged_until = timestamp + float(app_config.VIOLATION_COOLDOWN_SECONDS)
+                    record = {
+                        "id": vid, "timestamp": timestamp, "violation_type": violation_type,
+                        "zone_type": ztype, "zone_id": zone_id, "zone_name": zone.get("name"),
+                        "bbox": evidence_bbox, "plate_text": st.plate, "plate_confidence": st.plate_conf,
+                        "duration_s": float(dwell), "camera_id": self.camera_id,
+                        "camera_name": self.camera_name, "evidence_path": evidence_rel,
+                        "vehicle_class": vehicle_class,
+                        "vehicle_info": st.vehicle_info,
+                    }
+                    created.append(record)
+                    with self._last_violation_lock:
+                        self._last_violation_ids.append(record)
+                        if len(self._last_violation_ids) > 20:
+                            self._last_violation_ids = self._last_violation_ids[-20:]
+                
+                except Exception as e:
+                    print(f"[ENFORCE] {self.camera_name} | Track error: {e}")
+        
+        except Exception as e:
+            print(f"[ENFORCE] {self.camera_name} | Violation loop error: {e}")
 
         return created
 
@@ -702,7 +1035,7 @@ class EnforcementEngine:
             disp = math.hypot(cx - first_cx, cy - first_cy)
             max_disp = max(max_disp, disp)
 
-        max_disp_threshold = float(getattr(app_config, "STATIC_MOVEMENT_PX", 40.0) or 40.0)
+        max_disp_threshold = min(60.0, float(getattr(app_config, "STATIC_MOVEMENT_PX", 60.0) or 60.0))
 
         # If vehicle moved more than the configured threshold from start,
         # it's NOT stationary.
@@ -729,106 +1062,91 @@ class EnforcementEngine:
             return list(self._last_violation_ids[-int(limit):])
 
     def _check_wrong_way(self, st, zone) -> bool:
-        """Check if vehicle is moving against the allowed direction in a wrong_way zone.
+        """Check if vehicle is TRULY moving against the allowed direction.
         
-        The zone stores 'allowed_direction' as degrees (0-360):
-          0° = moving RIGHT (→)
-          90° = moving DOWN (↓)
-          180° = moving LEFT (←)
-          270° = moving UP (↑)
-        
-        A vehicle is "wrong way" if its movement direction differs from
-        allowed_direction by more than 150 degrees (i.e., clearly going opposite).
-        
-        CRITICAL: Stationary vehicles CANNOT be wrong-way. A parked car is not
-        "going against traffic" — it's just parked. Only MOVING vehicles can
-        violate wrong-way rules.
+        VERY STRICT criteria to avoid false positives:
+        1. Vehicle must be MOVING significantly (not parked/slow)
+        2. Must have traveled far enough to determine direction reliably
+        3. Direction must be CONSISTENTLY opposite (>160°) across multiple segments
+        4. Must have enough data points (at least 8 positions over 6+ seconds)
         """
-        if len(st.positions) < 5:
+        # Need substantial tracking data
+        if len(st.positions) < 8:
             return False
         
-        # FIRST: Check if vehicle is actually MOVING (not parked/stationary)
-        # A stationary vehicle cannot be "wrong way"
+        # Must have been tracked for at least 6 seconds
+        elapsed = st.positions[-1][0] - st.positions[0][0]
+        if elapsed < 6.0:
+            return False
+        
+        # FIRST: Check if vehicle is actually MOVING
         if self._is_stationary(st):
             return False
         
-        # Calculate vehicle's OVERALL movement direction from positions
+        # Calculate overall displacement
         first_ts, first_cx, first_cy = st.positions[0]
         last_ts, last_cx, last_cy = st.positions[-1]
         
         dx = last_cx - first_cx
         dy = last_cy - first_cy
-        
-        # Require significant movement distance (scaled to frame size)
-        # At 3200x1800, YOLO jitter can be 10-20px per sample
-        # Over 30 seconds with 15 samples, jitter alone can drift 50-80px
-        # Require at least 100px to be sure it's real movement
         distance = math.hypot(dx, dy)
-        if distance < 100.0:
-            return False  # Not enough movement — likely stationary with jitter
         
-        # Also check SPEED: must be moving at least 15 px/sec consistently
-        elapsed = max(0.1, last_ts - first_ts)
-        speed_px_per_sec = distance / elapsed
-        if speed_px_per_sec < 15.0:
-            return False  # Too slow — likely parked with bbox jitter
+        # Must have moved at least 150px (very significant movement)
+        if distance < 150.0:
+            return False
         
-        # Vehicle's overall direction in degrees (0=right, 90=down, 180=left, 270=up)
-        vehicle_angle = math.degrees(math.atan2(dy, dx)) % 360
+        # Must be moving at decent speed (>20 px/sec)
+        speed = distance / max(0.1, elapsed)
+        if speed < 20.0:
+            return False
         
         # Get allowed direction from zone config
         allowed_angle = self._get_zone_direction(zone)
         if allowed_angle is None:
-            return False  # No direction configured, can't check
+            return False  # NO direction configured → NEVER flag
         
-        # Calculate angle difference
+        # Calculate vehicle's overall direction
+        vehicle_angle = math.degrees(math.atan2(dy, dx)) % 360
+        
+        # Angle difference
         diff = abs(vehicle_angle - allowed_angle)
         if diff > 180:
             diff = 360 - diff
         
-        # STRICT threshold: only flag if clearly going OPPOSITE direction (>150°)
-        # This means:
-        # - 0-60° difference = same direction (OK)
-        # - 60-150° difference = turning/crossing (OK, belok kanan/kiri)
-        # - 150-180° difference = truly opposite / lawan arah (VIOLATION)
-        if diff <= 150.0:
+        # VERY STRICT: only flag if >160° (nearly perfectly opposite)
+        if diff <= 160.0:
             return False
         
-        # Additional check: consistency of wrong-way movement
-        # The vehicle must be consistently moving in the wrong direction,
-        # not just a momentary angle from a turn.
-        # Check the direction using multiple segments of the trajectory
-        if len(st.positions) >= 6:
-            # Split trajectory into segments and check each
-            n = len(st.positions)
-            wrong_segments = 0
-            total_segments = 0
+        # CONSISTENCY CHECK: split into 3+ segments, ALL must show wrong direction
+        n = len(st.positions)
+        segment_size = max(3, n // 4)
+        wrong_segments = 0
+        total_segments = 0
+        
+        for seg_start in range(0, n - segment_size, segment_size):
+            seg_end = min(seg_start + segment_size, n - 1)
+            _, sx, sy = st.positions[seg_start]
+            _, ex, ey = st.positions[seg_end]
+            seg_dx = ex - sx
+            seg_dy = ey - sy
+            seg_dist = math.hypot(seg_dx, seg_dy)
+            if seg_dist < 20.0:
+                continue  # Segment too short
             
-            # Check direction in 3 segments (beginning, middle, end)
-            segment_size = max(2, n // 3)
-            for seg_start in range(0, n - segment_size, segment_size):
-                seg_end = min(seg_start + segment_size, n - 1)
-                _, sx, sy = st.positions[seg_start]
-                _, ex, ey = st.positions[seg_end]
-                seg_dx = ex - sx
-                seg_dy = ey - sy
-                seg_dist = math.hypot(seg_dx, seg_dy)
-                if seg_dist < 10.0:
-                    continue  # Segment too short to determine direction
-                
-                seg_angle = math.degrees(math.atan2(seg_dy, seg_dx)) % 360
-                seg_diff = abs(seg_angle - allowed_angle)
-                if seg_diff > 180:
-                    seg_diff = 360 - seg_diff
-                
-                total_segments += 1
-                if seg_diff > 150.0:
-                    wrong_segments += 1
+            seg_angle = math.degrees(math.atan2(seg_dy, seg_dx)) % 360
+            seg_diff = abs(seg_angle - allowed_angle)
+            if seg_diff > 180:
+                seg_diff = 360 - seg_diff
             
-            # At least 2 out of 3 segments must show wrong-way movement
-            # This filters out vehicles that briefly go opposite while turning
-            if total_segments >= 2 and wrong_segments < 2:
-                return False
+            total_segments += 1
+            if seg_diff > 140.0:
+                wrong_segments += 1
+        
+        # ALL valid segments must confirm wrong-way (not just majority)
+        if total_segments < 2:
+            return False
+        if wrong_segments < total_segments:
+            return False  # Even ONE segment in correct direction = not wrong-way
         
         return True
 
@@ -940,6 +1258,159 @@ class EnforcementEngine:
 
 
 # -------------------------------------------------------------------
+# Smart Capture: Deblurring & Enhancement
+# -------------------------------------------------------------------
+
+def _estimate_blur_score(img_gray) -> float:
+    """Estimate blur level using Laplacian variance. Higher = sharper."""
+    try:
+        if img_gray is None or img_gray.size == 0:
+            return 0.0
+        blur = cv2.Laplacian(img_gray, cv2.CV_64F)
+        return float(blur.var())
+    except Exception:
+        return 0.0
+
+
+def _apply_deblur(img_bgr, bbox, speed_estimate=0.0):
+    """Apply deblurring pipeline optimized for fast-moving vehicles.
+    
+    Args:
+        img_bgr: Full frame BGR image
+        bbox: (x1, y1, x2, y2) of vehicle OR None for full-frame enhancement
+        speed_estimate: estimated movement speed (px/s), 0 = stationary
+    
+    Returns:
+        Enhanced image with deblurring applied
+    """
+    try:
+        h, w = img_bgr.shape[:2]
+        
+        # If bbox provided, work on the cropped area and return enhanced crop
+        # If bbox is None, apply to full frame
+        if bbox is None:
+            # Full frame enhancement (for evidence saving)
+            crop = img_bgr.copy()
+            bbox_coords = [0, 0, w, h]
+        else:
+            x1, y1, x2, y2 = [int(v) for v in bbox]
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            if x2 - x1 < 20 or y2 - y1 < 20:
+                return img_bgr
+            crop = img_bgr[y1:y2, x1:x2].copy()
+            bbox_coords = [x1, y1, x2, y2]
+
+        # Step 1: Sharpening for all captures (enhances text/edges regardless of motion)
+        sharpened, _ = preprocess_sharpen(crop, strength=1.8)
+
+        # Step 2: Adaptive CLAHE for contrast enhancement
+        enhanced, _ = preprocess_adaptive_clahe(sharpened, clip_limit=3.0, tile_size=(8, 8))
+
+        # Step 3: Heavy deblurring for fast-moving vehicles (motion blur)
+        if speed_estimate > 3.0:
+            # Vehicle is moving fast — apply motion deblurring
+            denoised, _ = preprocess_denoise(enhanced, h=5, hColor=5)
+            blur_sigma = min(int(speed_estimate * 0.3), 15)
+            if blur_sigma > 1:
+                blurred = cv2.GaussianBlur(denoised, (0, 0), blur_sigma)
+                deblurred = cv2.addWeighted(denoised, 1.5, blurred, -0.5, 0)
+                enhanced = np.clip(deblurred, 0, 255).astype(np.uint8)
+            # Final sharpening pass after deblurring
+            final, _ = preprocess_sharpen(enhanced, strength=2.0)
+            return final
+
+        return enhanced
+    except Exception as e:
+        print(f"[DEBLUR] Error: {e}")
+        return img_bgr
+
+
+def _capture_best_frame_for_plate(frame_bgr, bbox, timestamp, track_positions, camera_id, frame_buffer=None):
+    """Capture the clearest frame for plate recognition from frame buffer.
+    
+    Strategy: Use the best available frame for ANPR. For fast-moving vehicles,
+    we estimate speed from track positions and apply appropriate deblurring.
+    If frame_buffer is provided, select the sharpest frame from the buffer.
+    
+    Returns:
+        Best crop image for OCR processing
+    """
+    if frame_bgr is None:
+        return None, 0.0
+
+    # If buffer available, find sharpest frame from recent history
+    best_frame = frame_bgr
+    best_blur_score = -1.0
+    
+    if frame_buffer is not None and len(frame_buffer) > 0:
+        with frame_buffer._frame_buffer_lock:
+            buffer_frames = list(frame_buffer._frame_buffer)
+        
+        for buf_ts, buf_frame in buffer_frames:
+            try:
+                gray = cv2.cvtColor(buf_frame, cv2.COLOR_BGR2GRAY)
+                blur = _estimate_blur_score(gray)
+                if blur > best_blur_score:
+                    best_blur_score = blur
+                    best_frame = buf_frame
+            except Exception:
+                continue
+        
+        if best_blur_score > 0 and best_frame is not frame_bgr:
+            print(f"[SMART-CAPTURE] Selected sharper frame from buffer (blur={best_blur_score:.1f})")
+    
+    if best_frame is None:
+        return None, 0.0
+
+    try:
+        # If no bbox provided, apply deblurring to full frame and return it
+        if bbox is None:
+            # No bbox = caller already extracted the crop
+            return best_frame, best_blur_score if best_blur_score > 0 else 0.0
+        
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        h, w = best_frame.shape[:2]
+
+        # Ensure bbox is valid
+        if x2 - x1 < 10 or y2 - y1 < 10:
+            return None, 0.0
+
+        # Estimate movement speed from track positions
+        speed_px_per_frame = 0.0
+        if track_positions and len(track_positions) >= 2:
+            try:
+                last_ts, last_cx, last_cy = track_positions[-1]
+                prev_ts, prev_cx, prev_cy = track_positions[-2]
+                dt = abs(last_ts - prev_ts)
+                if dt > 0.001:
+                    dist = math.hypot(last_cx - prev_cx, last_cy - prev_cy)
+                    speed_px_per_frame = dist / dt  # px per second
+                    speed_px_per_frame = min(speed_px_per_frame, 200.0)  # Cap at 200px/s
+            except Exception:
+                speed_px_per_frame = 0.0
+
+        # Apply deblurring pipeline
+        enhanced_crop = _apply_deblur(best_frame, bbox, speed_px_per_frame)
+
+        if enhanced_crop is None:
+            return None, 0.0
+
+        # Score the enhanced image
+        try:
+            gray_enhanced = cv2.cvtColor(enhanced_crop, cv2.COLOR_BGR2GRAY)
+            final_blur_score = _estimate_blur_score(gray_enhanced)
+        except Exception:
+            final_blur_score = 0.0
+
+        return enhanced_crop, final_blur_score
+
+    except Exception as e:
+        print(f"[SMART-CAPTURE] Error: {e}")
+        return None, 0.0
+
+
+# -------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------
 
@@ -1021,6 +1492,16 @@ def _save_evidence(frame_bgr, bbox, camera_id, timestamp, violation_type):
             x2 = max(x1 + 1, min(fw, x2))
             y2 = max(y1 + 1, min(fh, y2))
 
+            # Expand bbox downward to capture plate area (often cut off by YOLO)
+            # Plates are typically at bottom 20-30% of vehicle
+            bbox_h = y2 - y1
+            bbox_w = x2 - x1
+            expand_down = int(bbox_h * 0.3)  # Extend 30% below detected box
+            expand_sides = int(bbox_w * 0.1)  # Slight horizontal expansion
+            x1 = max(0, x1 - expand_sides)
+            y2 = min(fh, y2 + expand_down)
+            x2 = min(fw, x2 + expand_sides)
+
             # Draw main bounding box (thick red)
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), 3)
 
@@ -1047,12 +1528,14 @@ def _save_evidence(frame_bgr, bbox, camera_id, timestamp, violation_type):
             bw = x2 - x1
             bh = y2 - y1
             if bw >= 50 and bh >= 50:
-                # Crop the vehicle area with generous padding for context
-                pad = 40
-                crop_x1 = max(0, x1 - pad)
-                crop_y1 = max(0, y1 - pad)
-                crop_x2 = min(fw, x2 + pad)
-                crop_y2 = min(fh, y2 + pad)
+                # Crop the vehicle area with generous padding for context (especially below for plate)
+                pad_x = 50
+                pad_top = 30
+                pad_bottom = int(bh * 0.4)  # Extra padding below for plate area
+                crop_x1 = max(0, x1 - pad_x)
+                crop_y1 = max(0, y1 - pad_top)
+                crop_x2 = min(fw, x2 + pad_x)
+                crop_y2 = min(fh, y2 + pad_bottom)
                 vehicle_crop = frame_bgr[crop_y1:crop_y2, crop_x1:crop_x2]
 
                 if vehicle_crop.size > 0:

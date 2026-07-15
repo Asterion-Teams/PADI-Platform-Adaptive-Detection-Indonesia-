@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import csv
 import os
+import json as _json
 import datetime
 import math
 import random
@@ -17,7 +18,8 @@ except Exception:
     YOLO = None
 
 from app.config import (
-    YOLO_MODEL_PATH, YOLO_ONNX_PATH, YOLO_ONNX_URL, CONF_THRESHOLD, IOU_THRESHOLD, 
+    YOLO_MODEL_PATH, YOLO11M_FINETUNED_PATH, YOLO11M_GENERIC_PATH,
+    YOLO_ONNX_PATH, YOLO_ONNX_URL, CONF_THRESHOLD, IOU_THRESHOLD, 
     VEHICLE_CLASSES, CLASS_MAPPING, CLASS_CAR, CLASS_MOTORCYCLE, CLASS_BUS,
     VEHICLE_CLASSES_CUSTOM, CLASS_MAPPING_CUSTOM,
     PROCESS_INTERVAL, STREAM_FPS, STREAM_JPEG_QUALITY, STREAM_MAX_WIDTH, INFER_IMGSZ, CAPTURE_DROP_FRAMES,
@@ -29,6 +31,11 @@ import app.globals as g
 from app.utils import save_stats
 from app.database import insert_history_batch
 from app.services.enforcement import EnforcementEngine
+
+# Set FFmpeg options ONCE at module level (not per-thread)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "timeout;8000|allowed_extensions;ALL|protocol_whitelist;file,http,https,tcp,tls,crypto|reconnect;1|reconnect_streamed;1|reconnect_delay_max;3"
+# Suppress FFmpeg/OpenCV verbose error logging
+os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
 
 def _download_file(url, dest_path):
     if os.path.exists(dest_path):
@@ -179,6 +186,77 @@ class YoloDnnEngine:
             )
         return dets
 
+# ── External Camera Token Refresher ────────────────────────────────────────────
+_EXTERNAL_API_URL = "https://streetside.mugnimaestra.dev/api/cameras"
+_EXTERNAL_TOKEN_CACHE = {}  # {external_id: {"token": "...", "hls_url": "...", "snapshot_url": "...", "fetched_at": ts}}
+
+
+def _refresh_external_token(external_id, camera_name=None, timeout_s=8):
+    """Fetch latest HLS/snapshot URLs for a camera from external API.
+
+    Returns dict with keys: hls_url, snapshot_url, or None if failed.
+    Uses module-level cache to avoid hammering the API.
+    """
+    cache_ttl = 300  # 5 minutes cache per camera
+    now = time.time()
+
+    # Check cache first
+    cached = _EXTERNAL_TOKEN_CACHE.get(external_id)
+    if cached and (now - cached.get("fetched_at", 0)) < cache_ttl:
+        return cached
+
+    try:
+        req = urllib.request.Request(
+            _EXTERNAL_API_URL,
+            headers={"User-Agent": "Mozilla/5.0 (SmartTraffic-PADI/1.0)", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            data = _json.loads(raw) if raw else {}
+
+        cams = data.get("cameras") or []
+        for c in cams:
+            if str(c.get("id") or "") != str(external_id):
+                continue
+            if c.get("content_type") and c.get("content_type").lower() != "cctv":
+                continue
+
+            image_path = c.get("image1") or ""
+            base_url = "https://streetside.mugnimaestra.dev"
+
+            # Build snapshot URL
+            if image_path and not image_path.startswith("http"):
+                image_path = base_url + image_path
+
+            # Build HLS stream URL from image1 token
+            hls_url = ""
+            if image_path and "/img/a/" in image_path:
+                try:
+                    parts = image_path.split("/img/a/")
+                    if len(parts) > 1:
+                        rest = parts[1]
+                        cam_name = rest.split("/")[0]
+                        token_match = rest.split("?token=")
+                        token = token_match[1] if len(token_match) > 1 else ""
+                        hls_url = f"{base_url}/stream/a/{cam_name}/video.m3u8?token={token}"
+                except Exception:
+                    hls_url = ""
+
+            result = {
+                "hls_url": hls_url,
+                "snapshot_url": image_path,
+                "fetched_at": now,
+            }
+            _EXTERNAL_TOKEN_CACHE[external_id] = result
+            return result
+
+        return cached  # Return stale cache if not found in fresh response
+    except Exception:
+        return cached  # Fall back to stale cache on error
+
+
+# ── CameraAgent ────────────────────────────────────────────────────────────────
+
 class CameraAgent(threading.Thread):
     def __init__(self, source_config, model_ref):
         threading.Thread.__init__(self)
@@ -209,6 +287,10 @@ class CameraAgent(threading.Thread):
         self.cap = None
         self.cap_url = None
         self._last_ffmpeg_grab_ts = 0.0
+        # External camera (mugnimaestra.dev) — store external_id for auto token refresh
+        self.external_id = source_config.get("external_id")
+        self._token_refresh_failures = 0
+        self._max_token_refresh_attempts = 3
 
         # Case 1 - Enforcement (illegal parking / busway / bicycle lane)
         try:
@@ -254,29 +336,26 @@ class CameraAgent(threading.Thread):
         self.cap_url = None
 
     def _ensure_cap(self):
+        # If cap exists and is open, just use it
         if self.cap is not None and self.cap_url == self.source_url:
             try:
                 if self.cap.isOpened():
                     return True
             except Exception:
                 pass
+        # Need new connection
         self._release_cap()
-        try:
-            if not os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS"):
-                # Support HLS fMP4 segments (Balitower, modern CCTV streams)
-                # allowed_extensions: allow .fmp4 extension for HLS segments
-                # protocol_whitelist: allow http/https/tcp/tls for HLS
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "timeout;20000|allowed_extensions;ALL|protocol_whitelist;file,http,https,tcp,tls,crypto|reconnect;1|reconnect_streamed;1|reconnect_delay_max;5"
-        except Exception:
-            pass
         cap = None
         try:
-            # Force FFMPEG backend for HLS streams
             url = str(self.source_url or "")
             if ".m3u8" in url or "hls" in url.lower() or "balitower" in url.lower():
                 cap = cv2.VideoCapture(self.source_url, cv2.CAP_FFMPEG)
             else:
-                cap = cv2.VideoCapture(self.source_url)
+                # Force TCP transport for RTSP (reduces packet loss / corrupt frames)
+                cap = cv2.VideoCapture(self.source_url, cv2.CAP_FFMPEG)
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+                cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 10000)
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
         except Exception:
             cap = None
         if cap is None:
@@ -321,10 +400,12 @@ class CameraAgent(threading.Thread):
                     ret, frame = cap.read()
                     if ret and frame is not None:
                         print(f"[{self.source_name}] Video replay — looping back to start")
+                        self._last_cap_success = time.time()
                         return frame, True
                 except Exception:
                     pass
             return None, False
+        self._last_cap_success = time.time()
         return frame, True
 
     def _is_local_video(self):
@@ -341,6 +422,7 @@ class CameraAgent(threading.Thread):
         return False
 
     def _capture_frame(self):
+        # Always use VideoCapture (ffmpeg not available on this system)
         if self._ensure_cap():
             frame, ok = self._read_from_cap()
             if ok:
@@ -348,20 +430,48 @@ class CameraAgent(threading.Thread):
                 return frame, True
             self._release_cap()
 
-        # Exponential backoff for repeated failures
+        # Backoff for repeated failures
         failures = getattr(self, '_consecutive_failures', 0)
         self._consecutive_failures = failures + 1
-        # Backoff: 0.5s, 1s, 2s, 4s, max 10s
-        backoff = min(10.0, 0.5 * (2 ** min(failures, 4)))
+        is_active = (self.source_url == g.VIDEO_SOURCE)
+        max_backoff = 2.0 if is_active else 5.0
+        backoff = min(max_backoff, 0.5 * (2 ** min(failures, 2)))
 
         now = time.time()
         if (now - float(self._last_ffmpeg_grab_ts or 0.0)) < backoff:
             return None, False
         self._last_ffmpeg_grab_ts = now
-        frame = _ffmpeg_grab_frame(self.source_url)
-        if frame is not None:
+
+        # Auto-refresh external camera token after 3 consecutive failures
+        if (failures >= 3 and self.external_id and
+                self._token_refresh_failures < self._max_token_refresh_attempts):
+            refreshed = _refresh_external_token(self.external_id, self.source_name)
+            if refreshed and refreshed.get("hls_url"):
+                old_url = self.source_url
+                # Use HLS if current is stream, otherwise use snapshot
+                new_url = refreshed["hls_url"]
+                if not new_url:
+                    new_url = refreshed.get("snapshot_url", "")
+                if new_url and new_url != old_url:
+                    self.source_url = new_url
+                    self.cap_url = None  # Force reconnect with new URL
+                    self._release_cap()
+                    self._token_refresh_failures += 1
+                    print(f"[{self.source_name}] Token refreshed ({self._token_refresh_failures}/{self._max_token_refresh_attempts}) — new URL: {new_url[:80]}...")
+                    # Try immediately with new URL
+                    if self._ensure_cap():
+                        frame, ok = self._read_from_cap()
+                        if ok:
+                            self._consecutive_failures = 0
+                            self._token_refresh_failures = 0
+                            return frame, True
+                        self._release_cap()
+
+        # Reset failures so we keep retrying
+        if failures > 5:
             self._consecutive_failures = 0
-        return frame, frame is not None
+
+        return None, False
 
     def _update_tracks(self, rects, rect_classes, timestamp):
         if not rects:
@@ -772,24 +882,33 @@ class CameraAgent(threading.Thread):
                 cv2.putText(frame, "NO SIGNAL", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
             cv2.putText(frame, "Asterion", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
+            # Keep full-res frame for enforcement evidence (no overlay drawn on it)
+            # The frame with overlays goes to streaming (can be downscaled)
+            
             with g.lock:
                 g.outputFrames[self.source_id] = frame
                 if self.source_url == g.VIDEO_SOURCE:
                     g.outputFrame = frame
 
-            # Sleep — target ~30 FPS for all cameras to ensure real-time
+            # Adaptive sleep: fast for active camera, slow for background
             if self.model is None:
                 time.sleep(0.5)
+            elif self.source_url == g.VIDEO_SOURCE:
+                # Active camera: capture at full speed for smooth video
+                time.sleep(1.0 / 30.0)
             else:
-                # Both active and background cameras run at the same FPS for real-time
-                # This ensures background processing (enforcement, tracking) stays up-to-date
-                time.sleep(max(0.01, 1.0 / float(app_config.STREAM_FPS or 30)))
+                # Background camera: 2 FPS for enforcement
+                for _ in range(10):
+                    if self.source_url == g.VIDEO_SOURCE:
+                        break
+                    if not self.running:
+                        break
+                    time.sleep(0.05)
 
     def stop(self):
         self.running = False
 
 def generate_frames(camera_id):
-    # Find the source URL
     target_url = None
     for src in g.CCTV_SOURCES:
         if src["id"] == camera_id:
@@ -797,78 +916,36 @@ def generate_frames(camera_id):
             break
             
     if target_url:
-        # Set the global video source so the agent starts updating outputFrame
         g.VIDEO_SOURCE = target_url
         
-        _last_frame_id = None  # Track if frame changed
-        _cached_jpeg = None    # Cache encoded JPEG
-        
         while True:
+            frame = None
             with g.lock:
                 frame = g.outputFrames.get(camera_id)
-                if frame is None and g.VIDEO_SOURCE == target_url:
-                    frame = g.outputFrame
                 if frame is None:
-                    time.sleep(0.01)
-                    continue
+                    frame = g.outputFrame
 
             if frame is None:
-                time.sleep(0.01)
+                time.sleep(0.05)
                 continue
 
-            # Check if frame actually changed (avoid re-encoding same frame)
-            frame_id = id(frame)
-            if frame_id == _last_frame_id and _cached_jpeg is not None:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + _cached_jpeg + b'\r\n')
-                try:
-                    fps = float(app_config.STREAM_FPS or 0)
-                except Exception:
-                    fps = 0.0
-                if fps <= 0:
-                    fps = 15.0
-                time.sleep(max(0.001, 1.0 / fps))
-                continue
-
-            _last_frame_id = frame_id
-
+            # Downscale for streaming (use config max width)
             try:
-                max_w = int(app_config.STREAM_MAX_WIDTH or 0)
+                h, w = frame.shape[:2]
+                if w > STREAM_MAX_WIDTH:
+                    scale = STREAM_MAX_WIDTH / w
+                    frame = cv2.resize(frame, (STREAM_MAX_WIDTH, int(h * scale)), interpolation=cv2.INTER_AREA)
             except Exception:
-                max_w = 0
-            if max_w > 0:
-                try:
-                    h, w = frame.shape[:2]
-                    if w > max_w:
-                        scale = float(max_w) / float(w)
-                        nh = max(1, int(round(h * scale)))
-                        frame = cv2.resize(frame, (int(max_w), int(nh)))
-                except Exception:
-                    pass
+                pass
 
-            try:
-                q = int(app_config.STREAM_JPEG_QUALITY or 80)
-            except Exception:
-                q = 80
-            q = max(30, min(95, q))
-            encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), int(q)]
-            (flag, encodedImage) = cv2.imencode(".jpg", frame, encode_params)
+            (flag, buf) = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
             if not flag:
-                time.sleep(0.01)
+                time.sleep(0.05)
                 continue
             
-            _cached_jpeg = bytearray(encodedImage)
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + _cached_jpeg + b'\r\n')
-            
-            # Throttle to avoid busy loop, match process interval roughly
-            try:
-                fps = float(app_config.STREAM_FPS or 0)
-            except Exception:
-                fps = 0.0
-            if fps <= 0:
-                fps = 15.0
-            time.sleep(max(0.001, 1.0 / fps))
+                   b'Content-Type: image/jpeg\r\n\r\n' + bytearray(buf) + b'\r\n')
+            time.sleep(1.0 / STREAM_FPS)
 
 def start_camera_agents():
     model_ref = None
@@ -891,13 +968,26 @@ def start_camera_agents():
     if require_gpu and (not torch_gpu) and (not opencv_gpu):
         raise RuntimeError("GPU required but not available (Torch CUDA OFF, OpenCV DNN CUDA OFF)")
 
-    # Priority: Custom trained model (vehicle_v3_best.pt) > generic COCO (yolov8l.pt) > ONNX fallback
+    # Priority: Fine-tuned YOLO11m > Generic YOLO11m > Generic YOLO11l > ONNX fallback
+    # Fine-tuned YOLO11m is preferred when USE_CUSTOM_YOLO is enabled
     preferred_model_path = None
-    if USE_CUSTOM_YOLO and os.path.isfile(YOLO_CUSTOM_PATH):
+
+    # 1. Fine-tuned YOLO11m (highest priority)
+    if USE_CUSTOM_YOLO and os.path.isfile(YOLO11M_FINETUNED_PATH):
+        preferred_model_path = YOLO11M_FINETUNED_PATH
+        print(f"[INFO] YOLO11m Fine-tuned found: {YOLO11M_FINETUNED_PATH}")
+    # 2. Legacy custom vehicle model (YOLOv8 fine-tuned)
+    elif USE_CUSTOM_YOLO and os.path.isfile(YOLO_CUSTOM_PATH):
         preferred_model_path = YOLO_CUSTOM_PATH
-        print(f"[INFO] Custom model found: {YOLO_CUSTOM_PATH}")
+        print(f"[INFO] Custom YOLO model found: {YOLO_CUSTOM_PATH}")
+    # 3. Generic YOLO11m
+    elif os.path.isfile(YOLO11M_GENERIC_PATH):
+        preferred_model_path = YOLO11M_GENERIC_PATH
+        print(f"[INFO] Generic YOLO11m found: {YOLO11M_GENERIC_PATH}")
+    # 4. Generic YOLO11l (root fallback)
     elif os.path.isfile(YOLO_MODEL_PATH):
         preferred_model_path = YOLO_MODEL_PATH
+        print(f"[INFO] YOLO11l fallback found: {YOLO_MODEL_PATH}")
 
     if torch_gpu and YOLO is not None and preferred_model_path:
         print(f"[INFO] Loading YOLO model (GPU): {os.path.basename(preferred_model_path)}")
@@ -942,16 +1032,20 @@ def start_camera_agents():
     g.yolo_model_instance = model_ref
 
     # Switch class mapping based on which model is loaded
-    if model_ref is not None and preferred_model_path == YOLO_CUSTOM_PATH:
+    # Fine-tuned YOLO11m and legacy vehicle model both use 6-class custom mapping
+    is_finetuned = preferred_model_path in (YOLO11M_FINETUNED_PATH, YOLO_CUSTOM_PATH)
+    if model_ref is not None and is_finetuned:
         app_config.VEHICLE_CLASSES = VEHICLE_CLASSES_CUSTOM
         app_config.CLASS_MAPPING = CLASS_MAPPING_CUSTOM
-        print(f"[INFO] Using CUSTOM class mapping (6 classes: bus, car, microbus, motorbike, pickup-van, truck)")
+        model_name = os.path.basename(preferred_model_path)
+        print(f"[INFO] Using CUSTOM class mapping (6 classes: bus, car, microbus, motorbike, pickup-van, truck) for {model_name}")
     else:
-        # Ensure COCO mapping is active for pretrained models (yolo11m, yolov8l, etc.)
+        # Ensure COCO mapping is active for generic pretrained models (yolo11m, yolo11l, etc.)
         from app.config import VEHICLE_CLASSES_COCO, CLASS_MAPPING_COCO
         app_config.VEHICLE_CLASSES = VEHICLE_CLASSES_COCO
         app_config.CLASS_MAPPING = CLASS_MAPPING_COCO
-        print(f"[INFO] Using COCO class mapping (vehicle subset: car, motorcycle, bus, truck)")
+        model_name = os.path.basename(preferred_model_path) if preferred_model_path else "unknown"
+        print(f"[INFO] Using COCO class mapping (vehicle subset: car, motorcycle, bus, truck) for {model_name}")
 
     # Start GPU batch inference worker (all cameras share one GPU efficiently)
     if model_ref is not None:

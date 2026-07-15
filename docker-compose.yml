@@ -1,0 +1,136 @@
+# ============================================================
+# SmartTraffic AI — PADI (Full Stack Compose)
+# Flask App + PostgreSQL + Redis + Ollama (Local AI)
+# ============================================================
+services:
+  # ── PostgreSQL Database ────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: padi_traffic_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: padi_traffic
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - padi_net
+
+  # ── Redis Cache ────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: padi_traffic_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - padi_net
+
+  # ── Ollama (Local LLM for Chat AI) ────────────────────────
+  # For GPU support: install nvidia-container-toolkit on host,
+  # then uncomment the `runtime: nvidia` line below.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: padi_traffic_ollama
+    restart: unless-stopped
+    # Uncomment for NVIDIA GPU support (requires nvidia-container-toolkit on host):
+    # runtime: nvidia
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - padi_net
+
+  # ── Flask Application ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: padi_traffic_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database
+      PG_HOST: db
+      PG_PORT: 5432
+      PG_USER: postgres
+      PG_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PG_DATABASE: padi_traffic
+
+      # Security
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      DEMO_MODE: ${DEMO_MODE:-0}
+
+      # Admin credentials (at minimum ONE of PASSWORD or PASSWORD_HASH must be set)
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      OPERATOR_USERNAME: ${OPERATOR_USERNAME:-operator}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-}
+      OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH:-}
+
+      # AI Provider
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_BASE_URL: ${AI_BASE_URL:-http://ollama:11434}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-llama3.2:3b}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+
+      # Flask
+      FLASK_ENV: production
+      HOST_IP: 0.0.0.0
+      HOST_PORT: 5000
+
+    volumes:
+      - app_data:/app/data
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - padi_net
+
+# ── Networks ────────────────────────────────────────────────
+networks:
+  padi_net:
+    driver: bridge
+
+# ── Volumes ─────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local
+  app_data:
+    driver: local

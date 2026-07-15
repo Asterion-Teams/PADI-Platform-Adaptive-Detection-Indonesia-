@@ -1,34 +1,56 @@
 [
     {
-        "id": "cam_d7af6ec796",
-        "name": "Halte Lapangan Panahan",
-        "url": "https://cctv.balitower.co.id/Gelora-017-700470_6/tracks-v1/index.m3u8",
-        "lat": -6.213652565831704,
-        "lng": 106.80201727201626,
-        "active": false
+        "id": "cam_d30241ba60",
+        "name": "JL. JUANDA ARAH KANTOR POS",
+        "url": "https://restreamer3.kotabogor.go.id/memfs/e2d12ced-bcc3-4826-b872-97fcce335e93.m3u8",
+        "active": true,
+        "lat": -6.5995122031678415,
+        "lng": 106.79456689061227,
+        "external_id": null
     },
     {
-        "id": "cam_ec7220906e",
-        "name": "Halte Lapangan Panahan Gelora 2",
-        "url": "https://cctv.balitower.co.id/Gelora-017-700470_8/tracks-v1/index.m3u8",
-        "lat": -6.213652565831704,
-        "lng": 106.80201727201626,
-        "active": false
+        "id": "cam_1955c59240",
+        "name": "CCTV SAMPING POM",
+        "url": "C:\\Avicena\\traffict\\competition\\big-data-traffict-competitiom\\data\\video\\pombensin.mp4",
+        "active": false,
+        "lat": -6.292108761295105,
+        "lng": 107.07990580905141,
+        "external_id": null
     },
     {
-        "id": "cam_c0b5fd0fbf",
-        "name": "CCTV BENDUNGAN HILIR",
-        "url": "https://cctv.balitower.co.id/Bendungan-Hilir-003-700014_2/tracks-v1/index.m3u8",
-        "lat": -6.207415,
-        "lng": 106.803671,
-        "active": true
+        "id": "cam_4469beb242",
+        "name": "JORR Selatan",
+        "url": "https://camera.jtd.co.id/camera/bearer/jlp/6/49/index.m3u8",
+        "active": false,
+        "lat": -6.295,
+        "lng": 106.805,
+        "external_id": null
     },
     {
-        "id": "cam_b9427c4e2f",
-        "name": "CCTV GELORA",
-        "url": "https://cctv.balitower.co.id/Gelora-004-700047_2/index.m3u8",
-        "lat": -6.22489,
-        "lng": 106.80458,
-        "active": false
+        "id": "cam_987300fbec",
+        "name": "JORR Selatan Cam 2",
+        "url": "https://camera.jtd.co.id/camera/bearer/jlp/6/52/index.m3u8",
+        "active": false,
+        "lat": -6.302,
+        "lng": 106.845,
+        "external_id": null
+    },
+    {
+        "id": "cam_3084abd65a",
+        "name": "Paseban 001",
+        "url": "https://compe.f-mc.my.id/hlsproxy/stream/a/Paseban-001/video.m3u8?token=01b2bf58ba15b8f3fffafb43dc7fdfafedf7a371-90fea9675d8ed3a9fb94c32a2a18748b-1783783436-1783779836",
+        "active": false,
+        "lat": -6.194386,
+        "lng": 106.84945,
+        "external_id": "334"
+    },
+    {
+        "id": "cam_15643bf332",
+        "name": "JPO Wisma Setya Bhakti 002",
+        "url": "https://compe.f-mc.my.id/hlsproxy/stream/a/JPO-Wisma-Setya-Bhakti-002/video.m3u8?token=96a92fbaf1b9f97a30dc501a110d6f5d10a1c658-eccb4606e7bdb768c4f3cdb66d561d8a-1783914483-1783910883",
+        "active": false,
+        "lat": -6.207208,
+        "lng": 106.858696,
+        "external_id": "2553"
     }
 ]

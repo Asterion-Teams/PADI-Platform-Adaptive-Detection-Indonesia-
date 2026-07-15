@@ -10,18 +10,39 @@ MODELS_DIR = os.path.join(BASE_DIR, 'models')
 CONFIG_FILE = os.path.join(DATA_DIR, "cctv_config.json")
 STATS_FILE = os.path.join(DATA_DIR, "traffic_stats.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "app_settings.json")
-YOLO_MODEL_PATH = os.path.join(MODELS_DIR, "yolo11m.pt")
-YOLO_ONNX_PATH = os.path.join(MODELS_DIR, "yolov5n.onnx")
-YOLO_ONNX_URL = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx"
+
+# ── YOLO Model Configuration ────────────────────────────────────────
+# Priority: YOLO11m Fine-tuned (vehicle_v3_yolo11m) > YOLO11m Generic > YOLO11l > ONNX Fallback
+#
+# YOLO11m Fine-tuned: models/vehicle_v3_yolo11m_best.pt
+#   → 6 classes: bus, car, microbus, motorbike, pickup-van, truck
+#   → Trained on Indonesian vehicle dataset (vehicle-detection v3)
+#   → Best balance of accuracy vs speed for real-time CCTV processing
+#
+# YOLO11m Generic: models/yolo11m.pt
+#   → COCO classes (car=2, motorcycle=3, bus=5, truck=7)
+#   → Fallback if fine-tuned model is not available
+#
+# YOLO11l Generic: models/yolo11l.pt (yolo11l.pt in root)
+#   → Heavier than YOLO11m, fallback if yolo11m.pt not found
+
 DATA_LAKE_PATH = os.environ.get("DATA_LAKE_PATH") or os.path.join(BASE_DIR, "data_lake", "raw")
 
-# Custom YOLO weights trained on Roboflow 'vehicle-detection v3' (6 classes
-# of Indonesian vehicles: bus, car, microbus, motorbike, pickup-van, truck).
-# If present, the camera pipeline will prefer this over the generic COCO weights.
-# Produced by scripts/train_vehicle_yolo.py
+# Fine-tuned YOLO11m (6-class Indonesian vehicle detector)
+YOLO11M_FINETUNED_PATH = os.path.join(MODELS_DIR, "vehicle_v3_yolo11m_best.pt")
+# Generic YOLO11m
+YOLO11M_GENERIC_PATH = os.path.join(MODELS_DIR, "yolo11m.pt")
+# Generic YOLO11l (root-level fallback)
+YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11l.pt")
+# ONNX fallback
+YOLO_ONNX_PATH = os.path.join(MODELS_DIR, "yolov5n.onnx")
+YOLO_ONNX_URL = "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx"
+
+# Custom YOLO weights (legacy: vehicle_v3_best.pt from YOLOv8 training)
+# Kept for backward compatibility but YOLO11m fine-tuned is preferred
 YOLO_CUSTOM_PATH = os.environ.get("YOLO_CUSTOM_PATH") or os.path.join(MODELS_DIR, "vehicle_v3_best.pt")
-# Whether to use the custom model (auto-disabled if file missing)
-USE_CUSTOM_YOLO = str(os.environ.get("USE_CUSTOM_YOLO") or "0").strip().lower() in {"1", "true", "yes", "on"}
+# Whether to use custom/fine-tuned model (auto-disabled if file missing)
+USE_CUSTOM_YOLO = str(os.environ.get("USE_CUSTOM_YOLO") or "1").strip().lower() in {"1", "true", "yes", "on"}
 
 # Server
 HOST_IP = "0.0.0.0"
@@ -52,6 +73,7 @@ HISTORY_MAX_LEN = 50000
 CLASS_CAR = 0
 CLASS_MOTORCYCLE = 1
 CLASS_BUS = 2
+CLASS_TRUCK = 3  # Additional internal class for truck (maps to CAR in internal stats)
 
 VEHICLE_CLASSES_COCO = [1, 2, 3, 5, 7]
 CLASS_MAPPING_COCO = {
@@ -110,7 +132,17 @@ VIOLATION_TYPES = [
     VIOLATION_WRONG_WAY,
 ]
 
+# ==============================================================
+# SENSITIVE ENFORCEMENT MODE
+# ==============================================================
+# When enabled, enforcement becomes more aggressive:
+# - Faster violation detection (reduced thresholds)
+# - Immediate ANPR on detection
+# - Shorter cooldown between violations
+SENSITIVE_MODE = str(os.environ.get("SENSITIVE_MODE") or "1").strip().lower() in {"1", "true", "yes", "on"}
+
 # How long a vehicle must remain (low movement) in a no-parking zone to trigger violation
+# Keep at 60s for illegal parking (user preference)
 ILLEGAL_PARKING_MIN_SECONDS = float(os.environ.get("ILLEGAL_PARKING_MIN_SECONDS") or 60.0)
 # Grace period: extra time before recording (allows emergency stops to move away)
 ILLEGAL_PARKING_GRACE_SECONDS = float(os.environ.get("ILLEGAL_PARKING_GRACE_SECONDS") or 0.0)
@@ -118,13 +150,32 @@ ILLEGAL_PARKING_GRACE_SECONDS = float(os.environ.get("ILLEGAL_PARKING_GRACE_SECO
 # This is MAX DISPLACEMENT from initial position (not accumulated movement)
 # YOLO bounding boxes jitter ~5-15px per frame even for stationary vehicles
 # At 1920x1080, vehicles in queue may shift 30-60px due to detection jitter
-STATIC_MOVEMENT_PX = float(os.environ.get("STATIC_MOVEMENT_PX") or 300.0)
+# SENSITIVE MODE: Reduced from 300px to 150px for faster stationary detection
+STATIC_MOVEMENT_PX = float(os.environ.get("STATIC_MOVEMENT_PX") or (100.0 if SENSITIVE_MODE else 150.0))
 # Seconds required in dynamic lane (busway/bicycle) before flagging (debounce)
-DYNAMIC_LANE_MIN_SECONDS = float(os.environ.get("DYNAMIC_LANE_MIN_SECONDS") or 2.0)
+# SENSITIVE MODE: Reduced from 5s to 1s for immediate response to violations
+DYNAMIC_LANE_MIN_SECONDS = float(os.environ.get("DYNAMIC_LANE_MIN_SECONDS") or (1.0 if SENSITIVE_MODE else 2.0))
+# Busway-specific thresholds:
+# - Moving fast (40+ px/s, traveled >40px): BUSWAY_FAST_MIN_SECONDS
+# - Medium speed (20-40 px/s): BUSWAY_MEDIUM_MIN_SECONDS
+# - Slow/stationary (<20 px/s): BUSWAY_SLOW_MIN_SECONDS
+BUSWAY_FAST_MIN_SECONDS = float(os.environ.get("BUSWAY_FAST_MIN_SECONDS") or 3.0)
+BUSWAY_MEDIUM_MIN_SECONDS = float(os.environ.get("BUSWAY_MEDIUM_MIN_SECONDS") or 5.0)
+BUSWAY_SLOW_MIN_SECONDS = float(os.environ.get("BUSWAY_SLOW_MIN_SECONDS") or 8.0)
+# Minimum consecutive zone detections before triggering violation (filters jitter)
+BUSWAY_MIN_ZONE_HITS = int(os.environ.get("BUSWAY_MIN_ZONE_HITS") or 3)
+# Minimum speed (px/s) to be considered "fast moving" in busway
+BUSWAY_FAST_SPEED_PX_S = float(os.environ.get("BUSWAY_FAST_SPEED_PX_S") or 40.0)
+# Minimum total distance traveled (px) to confirm actual movement
+BUSWAY_MIN_TRAVEL_DIST_PX = float(os.environ.get("BUSWAY_MIN_TRAVEL_DIST_PX") or 40.0)
+# Bicycle lane specific: even faster detection for passing vehicles
+BICYCLE_LANE_MIN_SECONDS = float(os.environ.get("BICYCLE_LANE_MIN_SECONDS") or (0.5 if SENSITIVE_MODE else 1.0))
 # Seconds a vehicle must be moving in wrong direction before flagging
-WRONG_WAY_MIN_SECONDS = float(os.environ.get("WRONG_WAY_MIN_SECONDS") or 4.0)
+# SENSITIVE MODE: Reduced from 8s to 3s for faster wrong-way detection
+WRONG_WAY_MIN_SECONDS = float(os.environ.get("WRONG_WAY_MIN_SECONDS") or (2.0 if SENSITIVE_MODE else 3.0))
 # Cooldown per track to avoid re-logging the same violation too quickly (seconds)
-VIOLATION_COOLDOWN_SECONDS = float(os.environ.get("VIOLATION_COOLDOWN_SECONDS") or 120.0)
+# SENSITIVE MODE: Reduced from 120s to 30s for more frequent logging
+VIOLATION_COOLDOWN_SECONDS = float(os.environ.get("VIOLATION_COOLDOWN_SECONDS") or (15.0 if SENSITIVE_MODE else 30.0))
 
 # Evidence: capture multiple frames for stronger proof
 # Number of evidence snapshots to capture (first entry, mid-dwell, violation trigger)
@@ -162,13 +213,25 @@ DEFAULT_PLATE_PREFIX = "B"
 # ==============================================================
 # Twitter/X API Config (for social media monitoring)
 # ==============================================================
-TWITTER_BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN") or "AAAAAAAAAAAAAAAAAAAAANGG9gEAAAAAptGWj9Cx51A32KJ8vwrcMNzVPVI%3DM88yPaXw5uXVOpqNFrV97dtHNRes9IcoLqHihani3lQa0IgdE1"
+TWITTER_BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN") or ""
 TWITTER_SEARCH_QUERY = os.environ.get("TWITTER_SEARCH_QUERY") or "(macet OR kemacetan OR parkir liar OR kecelakaan OR lalu lintas) (jakarta OR sudirman OR senayan OR bendungan hilir OR gelora)"
 TWITTER_MAX_RESULTS = int(os.environ.get("TWITTER_MAX_RESULTS") or 15)
 
 # X.com (Twitter) CRM Scraper Settings
 X_SEARCH_QUERY = "@DishubDKI OR #DishubDKI OR to:DishubDKI"
 X_COOKIES_FILE = os.path.join(DATA_DIR, "x_cookies.json")
+
+# ==============================================================
+# AI Provider (OpenAI-compatible API for ANPR enhancement + chat)
+# ==============================================================
+AI_PROVIDER = os.environ.get("AI_PROVIDER") or "sumopod"
+AI_BASE_URL = os.environ.get("AI_BASE_URL") or "https://ai.sumopod.com/v1"
+AI_API_KEY = os.environ.get("AI_API_KEY") or ""
+AI_MODEL = os.environ.get("AI_MODEL") or "gpt-4o-mini"
+AI_VEHICLE_MODEL = os.environ.get("AI_VEHICLE_MODEL") or "gemini/gemini-3.1-flash-lite"
+AI_USE_FOR_ANPR = str(os.environ.get("AI_USE_FOR_ANPR") or "1").strip().lower() in {"1", "true", "yes", "on"}
+AI_USE_FOR_CHAT = str(os.environ.get("AI_USE_FOR_CHAT") or "1").strip().lower() in {"1", "true", "yes", "on"}
+AI_CHAT_MODEL = os.environ.get("AI_CHAT_MODEL") or "gpt-4o-mini"
 
 
 # ==============================================================
@@ -184,6 +247,7 @@ def load_persisted_settings():
     global ILLEGAL_PARKING_MIN_SECONDS, STATIC_MOVEMENT_PX
     global DYNAMIC_LANE_MIN_SECONDS, WRONG_WAY_MIN_SECONDS, VIOLATION_COOLDOWN_SECONDS
     global TWITTER_SEARCH_QUERY, TWITTER_MAX_RESULTS, TIMEZONE, X_SEARCH_QUERY
+    global AI_PROVIDER, AI_BASE_URL, AI_API_KEY, AI_MODEL, AI_VEHICLE_MODEL, AI_USE_FOR_ANPR, AI_USE_FOR_CHAT, AI_CHAT_MODEL
 
     if not os.path.exists(SETTINGS_FILE):
         return
@@ -220,6 +284,9 @@ def load_persisted_settings():
         ANPR_ENABLED = bool(enf["anpr_enabled"])
     if "anpr_fallback_simulate" in enf:
         ANPR_FALLBACK_SIMULATE = bool(enf["anpr_fallback_simulate"])
+    if "sensitive_mode" in enf:
+        global SENSITIVE_MODE
+        SENSITIVE_MODE = bool(enf["sensitive_mode"])
     if "illegal_parking_min_seconds" in enf:
         ILLEGAL_PARKING_MIN_SECONDS = float(enf["illegal_parking_min_seconds"])
     if "static_movement_px" in enf:
@@ -248,6 +315,24 @@ def load_persisted_settings():
         except Exception:
             pass
 
+    ai = data.get("ai_provider") or {}
+    if "provider" in ai:
+        AI_PROVIDER = str(ai["provider"])
+    if "base_url" in ai:
+        AI_BASE_URL = str(ai["base_url"])
+    if "api_key" in ai:
+        AI_API_KEY = str(ai["api_key"])
+    if "model" in ai:
+        AI_MODEL = str(ai["model"])
+    if "vehicle_model" in ai:
+        AI_VEHICLE_MODEL = str(ai["vehicle_model"])
+    if "use_ai_for_anpr" in ai:
+        AI_USE_FOR_ANPR = bool(ai["use_ai_for_anpr"])
+    if "use_ai_for_chat" in ai:
+        AI_USE_FOR_CHAT = bool(ai["use_ai_for_chat"])
+    if "chat_model" in ai:
+        AI_CHAT_MODEL = str(ai["chat_model"])
+
     general = data.get("general") or {}
     if "timezone" in general:
         TIMEZONE = str(general["timezone"])
@@ -269,6 +354,7 @@ def save_persisted_settings():
             "violations_enabled": VIOLATIONS_ENABLED,
             "anpr_enabled": ANPR_ENABLED,
             "anpr_fallback_simulate": ANPR_FALLBACK_SIMULATE,
+            "sensitive_mode": SENSITIVE_MODE,
             "illegal_parking_min_seconds": ILLEGAL_PARKING_MIN_SECONDS,
             "static_movement_px": STATIC_MOVEMENT_PX,
             "dynamic_lane_min_seconds": DYNAMIC_LANE_MIN_SECONDS,
@@ -279,6 +365,16 @@ def save_persisted_settings():
             "search_query": TWITTER_SEARCH_QUERY,
             "max_results": TWITTER_MAX_RESULTS,
             "x_search_query": X_SEARCH_QUERY,
+        },
+        "ai_provider": {
+            "provider": AI_PROVIDER,
+            "base_url": AI_BASE_URL,
+            "api_key": AI_API_KEY,
+            "model": AI_MODEL,
+            "vehicle_model": AI_VEHICLE_MODEL,
+            "use_ai_for_anpr": AI_USE_FOR_ANPR,
+            "use_ai_for_chat": AI_USE_FOR_CHAT,
+            "chat_model": AI_CHAT_MODEL,
         },
         "general": {
             "timezone": TIMEZONE,

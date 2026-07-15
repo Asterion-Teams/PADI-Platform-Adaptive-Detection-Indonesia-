@@ -3,7 +3,7 @@
 {% block header_kicker %}Enforcement{% endblock %}
 {% block header_title %}Violation Zone Editor{% endblock %}
 {% block header_actions %}
-    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)] rounded-lg text-sm font-semibold transition-all border border-[var(--border-color)] hover:border-sky-500/40">
         <i class="fas fa-chart-line text-sky-300"></i>
         <span>Enforcement Dashboard</span>
     </a>
@@ -50,18 +50,18 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div class="glass-panel p-4 lg:col-span-2">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                     <i class="fas fa-draw-polygon text-sky-400"></i>
                     Draw zone (click to add points, double-click or press Enter to finish)
                 </h3>
                 <div class="flex gap-2">
-                    <button id="btn-refresh-frame" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
-                        <i class="fas fa-rotate"></i> Refresh Frame
+                    <button id="btn-refresh-frame" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-[var(--input-surface)] border border-[var(--border-color)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)]">
+                        <i class="fas fa-camera mr-1"></i> Snap
                     </button>
-                    <button id="btn-undo" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
-                        <i class="fas fa-undo"></i> Undo point
+                    <button id="btn-undo" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-[var(--input-surface)] border border-[var(--border-color)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)]">
+                        <i class="fas fa-rotate-left mr-1"></i> Undo
                     </button>
-                    <button id="btn-clear" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white">
+                    <button id="btn-clear" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-[var(--input-surface)] border border-[var(--border-color)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)]">
                         <i class="fas fa-trash"></i> Clear
                     </button>
                     <button id="btn-save" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white">
@@ -116,7 +116,7 @@
         </div>
 
         <div class="glass-panel p-4">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2 mb-2">
                 <i class="fas fa-layer-group text-purple-400"></i> Zones on this camera
             </h3>
             <div id="zones-list" class="space-y-2 text-sm text-slate-300 max-h-[520px] overflow-y-auto">
@@ -130,26 +130,26 @@
 <div id="add-cam-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[9999] backdrop-blur-sm">
     <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl">
         <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800">
-            <div class="text-white font-semibold flex items-center gap-2"><i class="fas fa-video text-sky-400"></i> Tambah CCTV Baru</div>
-            <button onclick="document.getElementById('add-cam-modal').classList.remove('flex');document.getElementById('add-cam-modal').classList.add('hidden');" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            <div class="text-[var(--text-primary)] font-semibold flex items-center gap-2"><i class="fas fa-video text-sky-400"></i> Tambah CCTV Baru</div>
+            <button onclick="document.getElementById('add-cam-modal').classList.remove('flex');document.getElementById('add-cam-modal').classList.add('hidden');" class="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><i class="fas fa-times"></i></button>
         </div>
         <div class="p-5 space-y-3">
             <div>
                 <label class="block text-xs text-slate-400 mb-1">Nama Lokasi</label>
-                <input id="ac-name" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="Contoh: Simpang Tugu Kujang">
+                <input id="ac-name" class="w-full bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="Contoh: Simpang Tugu Kujang">
             </div>
             <div>
                 <label class="block text-xs text-slate-400 mb-1">URL Stream (RTSP/HTTP/HLS)</label>
-                <input id="ac-url" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="rtsp://... atau https://...m3u8">
+                <input id="ac-url" class="w-full bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="rtsp://... atau https://...m3u8">
             </div>
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Latitude</label>
-                    <input id="ac-lat" type="number" step="any" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="-6.601">
+                    <input id="ac-lat" type="number" step="any" class="w-full bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="-6.601">
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Longitude</label>
-                    <input id="ac-lng" type="number" step="any" class="w-full bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="106.805">
+                    <input id="ac-lng" type="number" step="any" class="w-full bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:border-sky-500 focus:outline-none" placeholder="106.805">
                 </div>
             </div>
             <div id="ac-result" class="text-xs"></div>
@@ -171,6 +171,15 @@
     const img = document.getElementById('frame-img');
     const canvas = document.getElementById('zone-canvas');
     const ctx = canvas.getContext('2d');
+
+    // Helper: fetch with CSRF token for POST/PATCH/DELETE
+    async function csrfFetch(url, options) {
+        options = options || {};
+        const csrfRes = await fetch('/api/csrf_token');
+        const csrfData = await csrfRes.json();
+        const headers = { ...(options.headers || {}), 'X-CSRF-Token': csrfData.csrf_token || '' };
+        return fetch(url, { ...options, headers });
+    }
 
     async function loadCameras(){
         const r = await fetch('/api/sources');
@@ -197,7 +206,7 @@
         if (!currentCamera) return;
         // Switch source to activate agent for this camera
         try {
-            await fetch('/api/switch_source', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: currentCamera.id }) });
+            await csrfFetch('/api/switch_source', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: currentCamera.id }) });
         } catch(e) {}
         // Wait a moment for agent to capture a frame
         await new Promise(r => setTimeout(r, 500));
@@ -487,13 +496,14 @@
     async function saveZone(){
         if (!currentCamera) return alert('Select a camera first');
         if (points.length < 3) return alert('Draw at least 3 points');
+        if (!window.demoCheck('Tambah Zona Enforcement')) return;
         const name = document.getElementById('zone-name').value || '';
         // Build notes with direction for wrong_way zones
         let notes = '';
         if (currentType === 'wrong_way') {
             notes = 'direction:' + selectedDirection;
         }
-        const r = await fetch('/api/zones', {
+        const r = await csrfFetch('/api/zones', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
                 camera_id: currentCamera.id,
@@ -533,12 +543,12 @@
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
                         <span class="zone-type-pill ${cls}">${(z.zone_type||'').replace('_',' ')}</span>
-                        <span class="text-white text-sm truncate">${z.name || 'Zone #' + z.id}</span>
+                        <span class="text-[var(--text-primary)] text-sm truncate">${z.name || 'Zone #' + z.id}</span>
                     </div>
                     <div class="text-[11px] text-slate-500 mt-1">${z.active ? 'Active' : 'Inactive'} · ${new Date(((z.created_ts||0)*1000)).toLocaleString()}</div>
                 </div>
                 <div class="flex gap-1.5">
-                    <button data-id="${z.id}" data-act="toggle" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs text-white"><i class="fas fa-power-off"></i></button>
+                    <button data-id="${z.id}" data-act="toggle" class="px-2 py-1 rounded bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-600 border border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><i class="fas fa-power-off"></i></button>
                     <button data-id="${z.id}" data-act="delete" class="px-2 py-1 rounded bg-red-700 hover:bg-red-600 text-xs text-white"><i class="fas fa-trash"></i></button>
                 </div>
             </div>`;
@@ -547,10 +557,11 @@
             const id = b.dataset.id, act = b.dataset.act;
             if (act === 'delete'){
                 if (!confirm('Delete zone?')) return;
-                await fetch('/api/zones/' + id, { method:'DELETE' });
+                if (!window.demoCheck('Hapus Zona')) return;
+                await csrfFetch('/api/zones/' + id, { method:'DELETE' });
             } else if (act === 'toggle'){
                 const z = zs.find(x => String(x.id) === String(id));
-                await fetch('/api/zones/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !z.active }) });
+                await csrfFetch('/api/zones/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !z.active }) });
             }
             loadZones();
         }));

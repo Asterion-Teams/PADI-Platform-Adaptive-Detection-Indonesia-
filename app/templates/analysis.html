@@ -19,13 +19,13 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div class="glass-panel p-4">
                 <div class="text-xs text-slate-400 mb-2">Kamera</div>
-                <select id="camera-filter" class="w-full input-surface text-white rounded-xl px-3 py-2 text-xs transition-all">
+                <select id="camera-filter" class="w-full input-surface text-[var(--text-primary)] rounded-xl px-3 py-2 text-xs transition-all">
                     <option value="all">Semua CCTV</option>
                 </select>
             </div>
             <div class="glass-panel p-4">
                 <div class="text-xs text-slate-400 mb-2">Periode</div>
-                <select id="period-filter" class="w-full input-surface text-white rounded-xl px-3 py-2 text-xs transition-all">
+                <select id="period-filter" class="w-full input-surface text-[var(--text-primary)] rounded-xl px-3 py-2 text-xs transition-all">
                     <option value="30m">Last 30m</option>
                     <option value="1h" selected>Last 1h</option>
                     <option value="6h">Last 6h</option>
@@ -40,7 +40,7 @@
                     <div class="text-xs text-slate-400">Status Data</div>
                     <div class="text-xs text-slate-500 mt-1" id="analytics-status">Memuat...</div>
                 </div>
-                <button id="refresh-analytics" class="px-3 py-2 rounded-xl bg-slate-950/40 hover:bg-slate-950/65 border border-white/10 text-slate-200 text-xs transition-all">
+                <button id="refresh-analytics" class="px-3 py-2 rounded-xl bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs transition-all">
                     <i class="fas fa-rotate mr-1"></i> Refresh
                 </button>
             </div>
@@ -49,7 +49,7 @@
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="kpi-card p-4">
                 <div class="text-[10px] text-slate-500 uppercase tracking-wider">Total Traffic (Periode)</div>
-                <div class="text-2xl font-bold text-white mt-2 tabular-nums" id="kpi-volume">-</div>
+                <div class="text-2xl font-bold text-[var(--text-primary)] mt-2 tabular-nums" id="kpi-volume">-</div>
             </div>
             <div class="kpi-card p-4">
                 <div class="text-[10px] text-slate-500 uppercase tracking-wider">Cars (Periode)</div>
@@ -65,18 +65,18 @@
             </div>
             <div class="kpi-card p-4">
                 <div class="text-[10px] text-slate-500 uppercase tracking-wider">Lifetime Total</div>
-                <div class="text-2xl font-bold text-white mt-2 tabular-nums" id="kpi-lifetime">-</div>
+                <div class="text-2xl font-bold text-[var(--text-primary)] mt-2 tabular-nums" id="kpi-lifetime">-</div>
             </div>
             <div class="kpi-card p-4">
                 <div class="text-[10px] text-slate-500 uppercase tracking-wider">Online Cameras</div>
-                <div class="text-2xl font-bold text-white mt-2 tabular-nums" id="kpi-online">-</div>
+                <div class="text-2xl font-bold text-[var(--text-primary)] mt-2 tabular-nums" id="kpi-online">-</div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div class="glass-panel p-4 lg:col-span-2">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="text-sm font-semibold text-white">Trend (Density)</div>
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">Trend (Density)</div>
                     <div class="text-xs text-slate-500" id="trend-subtitle">-</div>
                 </div>
                 <div class="relative w-full h-[320px]">
@@ -85,7 +85,7 @@
             </div>
             <div class="glass-panel p-4">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="text-sm font-semibold text-white">Komposisi</div>
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">Komposisi</div>
                     <div class="text-xs text-slate-500" id="pie-subtitle">-</div>
                 </div>
                 <div class="relative w-full h-[320px]">
@@ -95,13 +95,13 @@
         </div>
 
         <div class="glass-panel overflow-hidden">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-slate-950/25">
-                <div class="text-sm font-semibold text-white">Top CCTV (Lifetime)</div>
+            <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)] bg-[var(--input-surface)]">
+                <div class="text-sm font-semibold text-[var(--text-primary)]">Top CCTV (Lifetime)</div>
                 <div class="text-xs text-slate-500" id="top-subtitle">-</div>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
-                    <thead class="bg-slate-950/35 text-slate-400 text-xs">
+                    <thead class="bg-[var(--input-surface)] text-[var(--text-tertiary)] text-xs">
                         <tr>
                             <th class="px-4 py-3 text-left">Camera</th>
                             <th class="px-4 py-3 text-right">Lifetime</th>
@@ -118,17 +118,17 @@
         <div id="prediction-popup-overlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
         <div class="absolute inset-0 flex items-center justify-center p-4">
             <div class="w-full max-w-[860px] glass-panel overflow-hidden border border-white/10">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/35">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-[var(--input-surface)]">
                     <div>
-                        <div class="text-sm font-semibold text-white" id="prediction-popup-title">Detail Prediksi</div>
+                        <div class="text-sm font-semibold text-[var(--text-primary)]" id="prediction-popup-title">Detail Prediksi</div>
                         <div class="text-xs text-slate-400 mt-0.5" id="prediction-popup-subtitle">-</div>
                     </div>
-                    <button id="prediction-popup-close" class="px-3 py-2 rounded-xl bg-slate-950/40 hover:bg-slate-950/65 border border-white/10 text-slate-200 text-xs transition-all">
+                    <button id="prediction-popup-close" class="px-3 py-2 rounded-xl bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs transition-all">
                         <i class="fas fa-xmark mr-1"></i> Tutup
                     </button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                    <div class="rounded-xl overflow-hidden border border-white/10 bg-slate-950/20">
+                    <div class="rounded-xl overflow-hidden border border-[var(--border-color)] bg-transparent">
                         <div id="prediction-map" class="w-full h-[320px]"></div>
                     </div>
                     <div class="space-y-3">
@@ -144,17 +144,17 @@
         <div id="forecast-popup-overlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
         <div class="absolute inset-0 flex items-center justify-center p-4">
             <div class="w-full max-w-[980px] glass-panel overflow-hidden border border-white/10">
-                <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950/35">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)] bg-[var(--input-surface)]">
                     <div>
-                        <div class="text-sm font-semibold text-white" id="forecast-popup-title">Forecast</div>
+                        <div class="text-sm font-semibold text-[var(--text-primary)]" id="forecast-popup-title">Forecast</div>
                         <div class="text-xs text-slate-400 mt-0.5" id="forecast-popup-subtitle">-</div>
                     </div>
-                    <button id="forecast-popup-close" class="px-3 py-2 rounded-xl bg-slate-950/40 hover:bg-slate-950/65 border border-white/10 text-slate-200 text-xs transition-all">
+                    <button id="forecast-popup-close" class="px-3 py-2 rounded-xl bg-[var(--input-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs transition-all">
                         <i class="fas fa-xmark mr-1"></i> Tutup
                     </button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                    <div class="rounded-xl overflow-hidden border border-white/10 bg-slate-950/20">
+                    <div class="rounded-xl overflow-hidden border border-[var(--border-color)] bg-transparent">
                         <div id="forecast-map" class="w-full h-[320px]"></div>
                     </div>
                     <div class="space-y-3">
@@ -163,11 +163,11 @@
                         <div class="text-xs text-slate-500">Tip: ini forecast berdasarkan pola historis per jam. Untuk lihat data historis, gunakan grafik di halaman ini.</div>
                     </div>
                 </div>
-                <div class="border-t border-white/10 bg-slate-950/20">
+                <div class="border-t border-[var(--border-color)] bg-transparent">
                     <div class="px-4 py-3 text-xs text-slate-400">Detail harian</div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-sm">
-                            <thead class="bg-slate-950/35 text-slate-400 text-xs">
+                            <thead class="bg-[var(--input-surface)] text-[var(--text-tertiary)] text-xs">
                                 <tr>
                                     <th class="px-4 py-3 text-left">Tanggal</th>
                                     <th class="px-4 py-3 text-left">Status</th>
@@ -201,9 +201,31 @@
         let predictionMap = null;
         let predictionMarker = null;
         let predictionNearbyLayer = null;
+        let predictionTileLayer = null;
         let forecastMap = null;
         let forecastMarker = null;
         let forecastNearbyLayer = null;
+        let forecastTileLayer = null;
+
+        function updatePredictionMapTiles() {
+            if (!predictionMap) return;
+            if (predictionTileLayer) predictionMap.removeLayer(predictionTileLayer);
+            const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+            const tileUrl = isDark 
+                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+            predictionTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(predictionMap);
+        }
+
+        function updateForecastMapTiles() {
+            if (!forecastMap) return;
+            if (forecastTileLayer) forecastMap.removeLayer(forecastTileLayer);
+            const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+            const tileUrl = isDark 
+                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+            forecastTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(forecastMap);
+        }
 
         function fmtInt(n) {
             const v = Math.round(safeNum(n));
@@ -273,7 +295,7 @@
                 const mapEl = document.getElementById('prediction-map');
                 if (mapEl && !predictionMap) {
                     predictionMap = L.map(mapEl, { zoomControl: true }).setView([lat, lng], 15);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(predictionMap);
+                    updatePredictionMapTiles();
                     predictionNearbyLayer = L.layerGroup().addTo(predictionMap);
                 }
                 if (predictionMap) {
@@ -381,7 +403,7 @@
                 tableBody.innerHTML = '';
                 items.slice(0, 31).forEach(it => {
                     const tr = document.createElement('tr');
-                    tr.className = "border-b border-slate-700/40 hover:bg-slate-700/20 transition-colors";
+                    tr.className = "border-b border-[var(--border-color)] hover:bg-[var(--nav-link-hover-bg)] transition-colors";
                     const dt = String(it.date_local || '-');
                     const wd = String(it.weekday || '').trim();
                     const st = String(it.status || '-');
@@ -404,7 +426,7 @@
                 const mapEl = document.getElementById('forecast-map');
                 if (mapEl && !forecastMap) {
                     forecastMap = L.map(mapEl, { zoomControl: true }).setView([lat, lng], 14);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(forecastMap);
+                    updateForecastMapTiles();
                     forecastNearbyLayer = L.layerGroup().addTo(forecastMap);
                 }
                 if (forecastMap) {
@@ -455,6 +477,11 @@
             if (!ctx) return null;
             if (typeof Chart === 'undefined') return null;
             const c = ctx.getContext('2d');
+            
+            const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+            const tickColor = isDark ? '#94a3b8' : '#475569';
+            const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+            
             return new Chart(c, {
                 type: 'line',
                 data: {
@@ -475,8 +502,8 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 12 } },
-                        y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#94a3b8', font: { size: 10 }, beginAtZero: true } }
+                        x: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 }, maxTicksLimit: 12 } },
+                        y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 }, beginAtZero: true } }
                     }
                 }
             });
@@ -487,6 +514,10 @@
             if (!ctx) return null;
             if (typeof Chart === 'undefined') return null;
             const c = ctx.getContext('2d');
+            
+            const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+            const labelColor = isDark ? '#cbd5e1' : '#475569';
+            
             return new Chart(c, {
                 type: 'doughnut',
                 data: {
@@ -505,7 +536,7 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 11 } }
+                            labels: { color: labelColor, boxWidth: 10, font: { size: 11 } }
                         }
                     },
                     cutout: '65%'
@@ -551,7 +582,7 @@
 
             items.slice(0, 12).forEach(it => {
                 const tr = document.createElement('tr');
-                tr.className = "border-b border-slate-700/40 hover:bg-slate-700/20 transition-colors";
+                tr.className = "border-b border-[var(--border-color)] hover:bg-[var(--nav-link-hover-bg)] transition-colors";
                 const stCls = it.st === 'online' ? 'text-emerald-300' : (it.st === 'offline' ? 'text-rose-300' : 'text-slate-400');
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-slate-200">${it.name}</td>
@@ -731,6 +762,25 @@
             if (c) c.addEventListener('change', refreshAnalytics);
             if (r) r.addEventListener('click', refreshAnalytics);
             setInterval(refreshAnalytics, 5000);
+            window.addEventListener('themechanged', () => {
+                updatePredictionMapTiles();
+                updateForecastMapTiles();
+                
+                if (trendChart) {
+                    const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+                    const tickColor = isDark ? '#94a3b8' : '#475569';
+                    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+                    trendChart.options.scales.x.ticks.color = tickColor;
+                    trendChart.options.scales.y.ticks.color = tickColor;
+                    trendChart.options.scales.y.grid.color = gridColor;
+                    trendChart.update();
+                }
+                if (classChart) {
+                    const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+                    classChart.options.plugins.legend.labels.color = isDark ? '#cbd5e1' : '#475569';
+                    classChart.update();
+                }
+            });
         });
     </script>
 {% endblock %}

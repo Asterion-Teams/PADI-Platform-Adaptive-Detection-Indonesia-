@@ -4,12 +4,14 @@ import numpy as np
 
 os.environ['FLAGS_use_mkldnn'] = '0'
 os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
+os.environ['PYTHONWARNINGS'] = 'ignore'
+os.environ['FLAGS_call_stack_level'] = '0'
 
-# Suppress paddle warnings
+# Suppress ALL warnings before importing paddle
 import warnings
 warnings.filterwarnings('ignore')
 import logging
-logging.disable(logging.WARNING)
+logging.disable(logging.CRITICAL)
 
 try:
     from paddleocr import PaddleOCR
@@ -19,7 +21,7 @@ try:
         text_recognition_model_name='PP-OCRv4_server_rec' if device_label.startswith('gpu') else 'PP-OCRv4_mobile_rec',
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
-        use_textline_orientation=False,
+        use_textline_orientation=True,
     )
     try:
         engine = PaddleOCR(device=device_label, **base_kwargs)

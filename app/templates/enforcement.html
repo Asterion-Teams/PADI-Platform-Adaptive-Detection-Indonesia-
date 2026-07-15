@@ -1,18 +1,23 @@
 {% extends "base.html" %}
 {% block title %}PADI - Enforcement (E-TLE){% endblock %}
+{% block header_icon %}
+<div class="w-7 h-7 rounded-[0.4rem] flex items-center justify-center bg-blue-50 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">
+    <i class="fas fa-gavel text-sm"></i>
+</div>
+{% endblock %}
 {% block header_kicker %}Enforcement{% endblock %}
 {% block header_title %}Intelligent Traffic Enforcement & Behaviour Analysis{% endblock %}
 {% block header_actions %}
-    <a href="/zones" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
-        <i class="fas fa-draw-polygon text-sky-300"></i>
+    <a href="/zones" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/70 text-slate-700 dark:text-white rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-500/40 shadow-sm">
+        <i class="fas fa-draw-polygon text-sky-500 dark:text-sky-400"></i>
         <span>Zone Editor</span>
     </a>
-    <button id="btn-clear-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-red-500/40">
-        <i class="fas fa-trash text-red-300"></i>
+    <button id="btn-clear-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/70 text-slate-700 dark:text-white rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 hover:border-red-300 dark:hover:border-red-500/40 shadow-sm">
+        <i class="fas fa-trash text-red-500 dark:text-red-400"></i>
         <span>Clear Data</span>
     </button>
-    <button id="btn-export-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-purple-500/40">
-        <i class="fas fa-file-csv text-purple-300"></i>
+    <button id="btn-export-violations" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/70 text-slate-700 dark:text-white rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-500/40 shadow-sm">
+        <i class="fas fa-file-csv text-purple-500 dark:text-purple-400"></i>
         <span>Export CSV</span>
     </button>
 {% endblock %}
@@ -40,7 +45,9 @@
     .status-resolved { color: #86efac; }
     .status-rejected { color: #fca5a5; }
     #heatmap { height: 420px; border-radius: 12px; }
-    .mini-card { background: rgba(2,6,23,0.45); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 12px 14px; }
+    .mini-card { background: var(--glass-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-panel); }
+    .glass-panel { background: #ffffff; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); border-radius: 1rem; }
+    .dark .glass-panel { background: #0f172a; border-color: #1e293b; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2); }
 </style>
 {% endblock %}
 
@@ -48,75 +55,77 @@
 <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
 
     <!-- Period selector -->
-    <div class="glass-panel p-3 flex flex-wrap items-center gap-2">
-        <span class="text-xs text-slate-400 pl-2">Period:</span>
-        <div class="flex flex-wrap gap-1.5" id="period-group">
-            <button data-period="1h"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">1H</button>
-            <button data-period="6h"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">6H</button>
-            <button data-period="24h" class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white active">24H</button>
-            <button data-period="7d"  class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">7D</button>
-            <button data-period="30d" class="period-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white">30D</button>
+    <div class="glass-panel p-4 flex flex-wrap items-center justify-between gap-4 mb-2">
+        <div class="flex items-center gap-3">
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Period:</span>
+            <div class="flex items-center gap-1.5" id="period-group">
+                <button data-period="1h"  class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">1H</button>
+                <button data-period="6h"  class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">6H</button>
+                <button data-period="24h" class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">24H</button>
+                <button data-period="7d"  class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">7D</button>
+                <button data-period="30d" class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors active">30D</button>
+            </div>
         </div>
-        <span class="w-full sm:w-auto sm:ml-auto text-xs text-slate-500" id="last-refresh">—</span>
+        <span class="text-[11px] font-medium text-slate-400" id="last-refresh">—</span>
     </div>
 
     <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div class="glass-panel p-4">
-            <div class="text-xs text-slate-400">Total Pelanggaran</div>
-            <div class="text-3xl font-bold text-white mt-1" id="kpi-total">0</div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="glass-panel p-5 relative overflow-hidden">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Total Detections</div>
+            <div class="text-4xl font-bold text-slate-800 dark:text-white" id="kpi-total">0</div>
         </div>
-        <div class="glass-panel p-4">
-            <div class="text-xs text-slate-400">Parkir Liar</div>
-            <div class="text-3xl font-bold text-red-300 mt-1" id="kpi-illegal_parking">0</div>
+        <div class="glass-panel p-5 relative overflow-hidden">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Parkir Liar</div>
+            <div class="text-4xl font-bold text-red-500" id="kpi-illegal_parking">0</div>
         </div>
-        <div class="glass-panel p-4">
-            <div class="text-xs text-slate-400">Jalur Busway</div>
-            <div class="text-3xl font-bold text-orange-300 mt-1" id="kpi-busway_occupancy">0</div>
+        <div class="glass-panel p-5 relative overflow-hidden">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Jalur Busway</div>
+            <div class="text-4xl font-bold text-orange-500" id="kpi-busway_occupancy">0</div>
         </div>
-        <div class="glass-panel p-4">
-            <div class="text-xs text-slate-400">Jalur Sepeda</div>
-            <div class="text-3xl font-bold text-cyan-300 mt-1" id="kpi-bicycle_lane_occupancy">0</div>
+        <div class="glass-panel p-5 relative overflow-hidden">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Jalur Sepeda</div>
+            <div class="text-4xl font-bold text-cyan-500" id="kpi-bicycle_lane_occupancy">0</div>
         </div>
-        <div class="glass-panel p-4">
-            <div class="text-xs text-slate-400">Ngetem</div>
-            <div class="text-3xl font-bold text-yellow-300 mt-1" id="kpi-illegal_pickup_dropoff">0</div>
+        <div class="glass-panel p-5 relative overflow-hidden">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Ngetem</div>
+            <div class="text-4xl font-bold text-yellow-500" id="kpi-illegal_pickup_dropoff">0</div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <!-- Live Camera Feed with Zone Overlay -->
-        <div class="glass-panel p-4">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
-                    <i class="fas fa-video text-red-400"></i> Live Monitoring
+        <div class="glass-panel p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <h3 class="text-slate-800 dark:text-white font-bold text-[13px] flex items-center gap-2">
+                    <i class="fas fa-video text-red-500"></i> Live Monitoring
                     <span class="inline-flex h-2 w-2 rounded-full bg-red-500 animate-pulse ml-1"></span>
                 </h3>
-                <select id="live-cam-select" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto"></select>
+                <select id="live-cam-select" class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-xs px-3 py-1.5 rounded-lg shadow-sm font-medium w-full sm:w-auto outline-none"></select>
             </div>
-            <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-black" style="min-height:280px">
-                <img id="live-feed" class="w-full" style="display:none" />
-                <div id="live-placeholder" class="flex items-center justify-center h-[280px] text-slate-500 text-sm">
+            <div class="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-black shadow-sm" style="min-height:280px">
+                <img id="live-feed" class="w-full object-cover" style="display:none" />
+                <div id="live-placeholder" class="flex items-center justify-center h-[280px] text-slate-400 text-sm font-medium">
                     <i class="fas fa-video-slash mr-2"></i> Select camera to start monitoring
                 </div>
             </div>
-            <div class="mt-2 text-xs text-slate-500 flex items-center gap-3">
-                <span><i class="fas fa-shield-halved text-emerald-400 mr-1"></i> Enforcement zones active on this camera</span>
-                <span id="live-zone-count" class="text-emerald-300 font-semibold">0 zones</span>
+            <div class="mt-3 text-[11px] text-slate-500 flex items-center gap-2 font-medium">
+                <i class="fas fa-shield-halved text-emerald-500"></i> Enforcement zones active on this camera
+                <span id="live-zone-count" class="text-emerald-600 dark:text-emerald-400 font-bold ml-1">0 zones</span>
             </div>
         </div>
 
         <!-- Active Zones Overview -->
         <div class="glass-panel p-4">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                     <i class="fas fa-draw-polygon text-sky-400"></i> Active Enforcement Zones
                 </h3>
                 <a href="/zones" class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
                     <i class="fas fa-plus"></i> Add Zone
                 </a>
             </div>
-            <div id="zones-overview" class="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+            <div id="zones-overview" class="space-y-2 overflow-y-auto pr-1" style="max-height: 420px;">
                 <div class="text-slate-500 text-xs text-center py-8">Loading zones...</div>
             </div>
         </div>
@@ -126,7 +135,7 @@
         <!-- Spatial heatmap -->
         <div class="glass-panel p-4">
             <div class="flex items-center justify-between mb-2">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                     <i class="fas fa-fire text-red-400"></i> Spatial Violation Heatmap
                 </h3>
                 <span class="text-[10px] text-slate-500" id="heatmap-count">0 points</span>
@@ -136,11 +145,11 @@
 
         <!-- Temporal chart (by hour) -->
         <div class="glass-panel p-4">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2 mb-2">
                 <i class="fas fa-chart-column text-sky-400"></i> Violations by Hour of Day
             </h3>
             <div style="height:260px"><canvas id="chart-hour"></canvas></div>
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mt-4 mb-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2 mt-4 mb-2">
                 <i class="fas fa-calendar-week text-emerald-400"></i> Violations by Day of Week
             </h3>
             <div style="height:150px"><canvas id="chart-dow"></canvas></div>
@@ -150,7 +159,7 @@
     <!-- Recommendations simulator -->
     <div class="glass-panel p-4">
         <div class="flex items-center justify-between mb-2">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                 <i class="fas fa-bullseye text-purple-400"></i> Enforcement Placement Recommendations
             </h3>
             <span class="text-[10px] text-slate-500">Based on violation density, type diversity & recency</span>
@@ -176,7 +185,7 @@
     <!-- Laporan Media Sosial (Twitter/X) -->
     <div class="glass-panel p-4">
         <div class="flex items-center justify-between mb-3">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                 <i class="fab fa-x-twitter text-slate-300"></i> Laporan Media Sosial
                 <span class="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">Live</span>
             </h3>
@@ -193,12 +202,15 @@
 
     <!-- Recent violations feed -->
     <div class="glass-panel p-4">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2">
-                <i class="fas fa-list text-amber-400"></i> Pelanggaran Terbaru
-            </h3>
-            <div class="flex flex-wrap gap-2">
-                <select id="filter-type" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto">
+        <div class="flex flex-col gap-3 mb-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-list text-amber-400"></i> Pelanggaran Terbaru
+                </h3>
+                <span id="last-refresh" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">—</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                <select id="filter-type" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md">
                     <option value="">All types</option>
                     <option value="illegal_parking">Illegal Parking</option>
                     <option value="busway_occupancy">Busway</option>
@@ -206,126 +218,206 @@
                     <option value="illegal_pickup_dropoff">Pickup/Drop-off</option>
                     <option value="wrong_way">Lawan Arah</option>
                 </select>
-                <select id="filter-status" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto">
+                <select id="filter-status" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md">
                     <option value="">All statuses</option>
                     <option value="pending">Pending</option>
                     <option value="dispatched">Dispatched</option>
                     <option value="resolved">Resolved</option>
                     <option value="rejected">Rejected</option>
                 </select>
-                <input id="filter-plate" placeholder="Plate contains…" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" />
-                <input id="filter-date-start" type="date" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Dari tanggal" />
-                <input id="filter-date-end" type="date" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Sampai tanggal" />
-                <select id="filter-limit" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md w-full sm:w-auto" title="Jumlah per halaman">
+                <input id="filter-plate" placeholder="Plate contains…" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md" />
+                <input id="filter-date-start" type="date" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md" title="Dari tanggal" />
+                <input id="filter-date-end" type="date" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md" title="Sampai tanggal" />
+                <select id="filter-limit" class="input-surface text-slate-200 text-xs px-2.5 py-1.5 rounded-md" title="Jumlah per halaman">
                     <option value="50">50</option>
                     <option value="100" selected>100</option>
                     <option value="250">250</option>
                     <option value="500">500</option>
                     <option value="1000">1000</option>
                 </select>
-                <button id="apply-filter" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white w-full sm:w-auto">Apply</button>
+                <button id="apply-filter" class="px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white">Apply</button>
             </div>
         </div>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto rounded-lg border border-[var(--border-color)]">
         <table class="w-full text-sm">
-            <thead class="text-slate-400 text-xs uppercase">
+            <thead class="text-[10px] uppercase tracking-wider bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 sticky top-0">
                 <tr>
-                    <th class="text-left py-2 px-2">Time</th>
-                    <th class="text-left py-2 px-2">Location</th>
-                    <th class="text-left py-2 px-2">Type</th>
-                    <th class="text-left py-2 px-2">Plate</th>
-                    <th class="text-left py-2 px-2">Vehicle</th>
-                    <th class="text-right py-2 px-2">Duration</th>
-                    <th class="text-left py-2 px-2">Status</th>
-                    <th class="text-left py-2 px-2">Action</th>
+                    <th class="text-left py-2.5 px-3 font-semibold whitespace-nowrap">Time</th>
+                    <th class="text-left py-2.5 px-3 font-semibold">Location</th>
+                    <th class="text-left py-2.5 px-3 font-semibold">Type</th>
+                    <th class="text-left py-2.5 px-3 font-semibold">Plate</th>
+                    <th class="text-left py-2.5 px-3 font-semibold">Vehicle</th>
+                    <th class="text-right py-2.5 px-3 font-semibold whitespace-nowrap">Duration</th>
+                    <th class="text-left py-2.5 px-3 font-semibold">Status</th>
+                    <th class="text-center py-2.5 px-3 font-semibold">Action</th>
                 </tr>
             </thead>
-            <tbody id="violations-body" class="text-slate-300 text-[13px]"></tbody>
+            <tbody id="violations-body" class="text-slate-600 dark:text-slate-300 text-[13px] divide-y divide-slate-200/70 dark:divide-slate-800/60"></tbody>
         </table>
         </div>
         <!-- Pagination -->
-        <div class="flex items-center justify-between mt-3 px-2">
-            <div class="text-xs text-slate-500" id="violations-info">—</div>
-            <div class="flex gap-1">
-                <button id="page-prev" class="px-3 py-1 rounded-md text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-30" disabled>← Prev</button>
-                <button id="page-next" class="px-3 py-1 rounded-md text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-30" disabled>Next →</button>
+        <div class="flex items-center justify-between mt-3 px-1">
+            <div class="text-xs text-slate-500 dark:text-slate-400" id="violations-info">—</div>
+            <div class="flex gap-1.5">
+                <button id="page-prev" class="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" disabled>← Prev</button>
+                <button id="page-next" class="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" disabled>Next →</button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Evidence modal -->
-<div id="evidence-modal" class="fixed inset-0 bg-black/85 hidden items-center justify-center z-[9999] backdrop-blur-md p-4">
-    <div class="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden">
+<div id="evidence-modal" class="fixed inset-0 bg-slate-900/40 dark:bg-black/80 hidden items-center justify-center z-[9999] backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-3xl shadow-xl dark:shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 bg-slate-800/50 border-b border-slate-700/50">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
-                    <i class="fas fa-shield-halved text-red-400 text-lg"></i>
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 shrink-0 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900 dark:to-slate-900">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-9 h-9 rounded-lg bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center shrink-0 border border-sky-200 dark:border-sky-500/20">
+                    <i class="fas fa-file-invoice text-sky-600 dark:text-sky-400 text-sm"></i>
                 </div>
-                <div>
-                    <div id="em-title" class="text-white font-bold text-base">E-TLE Report</div>
-                    <div id="em-subtitle" class="text-slate-400 text-xs mt-0.5">Violation Evidence</div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h2 id="em-title" class="text-slate-900 dark:text-white font-semibold text-sm">E-TLE Report</h2>
+                        <span id="em-status-badge"></span>
+                    </div>
+                    <div id="em-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5"></div>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                <span id="em-status-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">PENDING</span>
-                <button onclick="document.getElementById('evidence-modal').classList.remove('flex'); document.getElementById('evidence-modal').classList.add('hidden');" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-all">
+            <div class="flex gap-2 shrink-0">
+                <button onclick="window.print()" class="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md text-slate-600 dark:text-slate-400 text-xs font-medium transition-colors">
+                    <i class="fas fa-print mr-1"></i> Print
+                </button>
+                <button onclick="document.getElementById('evidence-modal').classList.remove('flex'); document.getElementById('evidence-modal').classList.add('hidden');" class="w-8 h-8 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             </div>
         </div>
 
-        <!-- Body -->
-        <div class="p-5">
-            <!-- Evidence Image -->
-            <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-black">
-                <img id="em-img" class="w-full max-h-[55vh] object-contain" />
-                <div class="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm">
-                    <span id="em-violation-badge" class="text-[11px] font-bold text-red-300 uppercase tracking-wide">ILLEGAL PARKING</span>
+        <!-- Body (scrollable) -->
+        <div class="p-5 overflow-y-auto flex-1 space-y-5">
+            <!-- Evidence Image + Side Info -->
+            <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                <!-- Evidence Image -->
+                <div class="sm:col-span-3 relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black aspect-video">
+                    <img id="em-img" class="w-full h-full max-h-[32vh] object-contain" />
+                    <div class="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-600/90 backdrop-blur-sm">
+                        <span id="em-violation-badge" class="text-[10px] font-semibold text-white uppercase tracking-wide">ILLEGAL PARKING</span>
+                    </div>
+                    <div class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/75 backdrop-blur-sm">
+                        <span id="em-time-badge" class="text-[10px] font-mono text-cyan-300"></span>
+                    </div>
                 </div>
-                <div class="absolute bottom-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm">
-                    <span id="em-time-badge" class="text-[11px] font-mono text-cyan-300"></span>
+
+                <!-- Key Info Side Panel -->
+                <div class="sm:col-span-2 flex flex-col gap-2">
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-lg p-3 bg-sky-50/50 dark:bg-sky-500/5">
+                        <div class="text-[10px] text-sky-600 dark:text-sky-400 uppercase tracking-wider font-semibold mb-1">Plat Nomor</div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <div id="em-plate" class="text-slate-900 dark:text-white font-bold font-mono text-base tracking-wider">—</div>
+                            <span id="em-plate-conf" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 hidden">—</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                            <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-medium mb-1">Kendaraan</div>
+                            <div id="em-vehicle" class="text-slate-900 dark:text-white font-medium text-xs capitalize">—</div>
+                        </div>
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                            <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-medium mb-1">Durasi</div>
+                            <div id="em-duration" class="text-slate-900 dark:text-white font-semibold text-xs tabular-nums">—</div>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-lg p-3 flex-1">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-medium mb-1">Lokasi</div>
+                        <div id="em-location" class="text-slate-900 dark:text-white text-xs font-mono break-words">—</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Info Grid -->
-            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Plat Nomor</div>
-                    <div id="em-plate" class="text-white font-bold font-mono text-sm tracking-wider">—</div>
+            <!-- AI Vehicle Analysis -->
+            <div id="em-vehicle-details">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-[11px] text-slate-700 dark:text-slate-300 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                        <i class="fas fa-robot text-violet-500 dark:text-violet-400 text-xs"></i> AI Vehicle Analysis
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase shrink-0">Accuracy</div>
+                        <div class="w-20 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div id="em-conf-bar" class="h-full bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <span id="em-conf-label" class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 w-8 text-right tabular-nums">—</span>
+                    </div>
                 </div>
-                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Kendaraan</div>
-                    <div id="em-vehicle" class="text-white font-semibold text-sm capitalize">—</div>
-                </div>
-                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Lokasi</div>
-                    <div id="em-location" class="text-white text-xs font-mono">—</div>
-                </div>
-                <div class="bg-slate-800/40 rounded-xl p-3 border border-slate-700/40">
-                    <div class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Durasi</div>
-                    <div id="em-duration" class="text-white font-bold text-sm">—</div>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 hover:border-sky-300 dark:hover:border-sky-500/40 transition-colors">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase mb-1">Jenis</div>
+                        <div id="em-vtype" class="text-slate-900 dark:text-white text-xs font-medium mb-1.5 break-words">—</div>
+                        <div class="flex items-center justify-between gap-1">
+                            <div class="h-1 flex-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div id="em-vtype-bar" class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="em-vtype-conf" class="text-[10px] font-semibold text-sky-600 dark:text-sky-400 tabular-nums shrink-0">—</span>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 hover:border-violet-300 dark:hover:border-violet-500/40 transition-colors">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase mb-1">Merek</div>
+                        <div id="em-make" class="text-slate-900 dark:text-white text-xs font-medium mb-1.5 break-words">—</div>
+                        <div class="flex items-center justify-between gap-1">
+                            <div class="h-1 flex-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div id="em-make-bar" class="h-full bg-violet-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="em-make-conf" class="text-[10px] font-semibold text-violet-600 dark:text-violet-400 tabular-nums shrink-0">—</span>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 hover:border-amber-300 dark:hover:border-amber-500/40 transition-colors">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase mb-1">Warna</div>
+                        <div id="em-color" class="text-slate-900 dark:text-white text-xs font-medium mb-1.5 break-words">—</div>
+                        <div class="flex items-center justify-between gap-1">
+                            <div class="h-1 flex-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div id="em-color-bar" class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="em-color-conf" class="text-[10px] font-semibold text-amber-600 dark:text-amber-400 tabular-nums shrink-0">—</span>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 hover:border-emerald-300 dark:hover:border-emerald-500/40 transition-colors">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase mb-1">Plat</div>
+                        <div id="em-ai-plate" class="text-slate-900 dark:text-white text-xs font-medium font-mono tracking-wider mb-1.5 break-all">—</div>
+                        <div class="flex items-center justify-between gap-1">
+                            <div class="h-1 flex-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div id="em-ai-plate-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="em-ai-plate-conf" class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums shrink-0">—</span>
+                        </div>
+                    </div>
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 hover:border-rose-300 dark:hover:border-rose-500/40 transition-colors">
+                        <div class="text-[10px] text-slate-500 dark:text-slate-400 uppercase mb-1">Perusahaan</div>
+                        <div id="em-company" class="text-slate-900 dark:text-white text-xs font-medium mb-1.5 break-words">—</div>
+                        <div class="flex items-center justify-between gap-1">
+                            <div class="h-1 flex-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div id="em-company-bar" class="h-full bg-rose-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <span id="em-company-conf" class="text-[10px] font-semibold text-rose-600 dark:text-rose-400 tabular-nums shrink-0">—</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- Action Buttons -->
-            <div class="mt-5 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <button id="em-dispatch" class="group px-4 py-2.5 bg-sky-600/90 hover:bg-sky-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-900/20">
-                    <i class="fas fa-truck group-hover:scale-110 transition-transform"></i>
-                    <span>Kirim Petugas</span>
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button id="em-reject" class="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors">
+                    Tolak
                 </button>
-                <button id="em-resolve" class="group px-4 py-2.5 bg-emerald-600/90 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20">
-                    <i class="fas fa-check group-hover:scale-110 transition-transform"></i>
-                    <span>Selesai</span>
+                <button id="em-emergency" class="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-200 dark:border-amber-500/20 rounded-md transition-colors flex items-center gap-1.5">
+                    <i class="fas fa-triangle-exclamation text-[10px]"></i>
+                    Darurat
                 </button>
-                <button id="em-emergency" class="group px-4 py-2.5 bg-orange-600/90 hover:bg-orange-500 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-900/20">
-                    <i class="fas fa-triangle-exclamation group-hover:scale-110 transition-transform"></i>
-                    <span>Darurat</span>
+                <button id="em-resolve" class="px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/20 rounded-md transition-colors flex items-center gap-1.5">
+                    <i class="fas fa-check text-[10px]"></i>
+                    Selesai
                 </button>
-                <button id="em-reject" class="group px-4 py-2.5 bg-slate-700/90 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2">
-                    <i class="fas fa-times group-hover:scale-110 transition-transform"></i>
-                    <span>Tolak</span>
+                <button id="em-dispatch" class="px-3 py-1.5 text-xs font-medium text-white bg-sky-600 hover:bg-sky-500 dark:bg-sky-500 dark:hover:bg-sky-400 rounded-md transition-colors flex items-center gap-1.5 shadow-sm">
+                    <i class="fas fa-truck text-[10px]"></i>
+                    Kirim Petugas
                 </button>
             </div>
         </div>
@@ -338,6 +430,7 @@
     let heatmap = null;
     let heatLayer = null;
     let markersLayer = null;
+    let tileLayer = null;
     let chartHour = null;
     let chartDow = null;
 
@@ -358,7 +451,23 @@
         const ph = document.getElementById('live-placeholder');
         if (!camId) { img.style.display='none'; ph.style.display='flex'; return; }
         // Switch source
-        fetch('/api/switch_source', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:camId})});
+        fetch('/api/switch_source', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:camId})}).catch(()=>{});
+        
+        // Reset img src with cache-bust to force refresh
+        img.onerror = function() {
+            // Auto-reconnect: try again after 2s on error
+            const self = img;
+            setTimeout(() => {
+                if (self._currentCamId === camId) {
+                    self.src = '/video_feed/' + camId + '?t=' + Date.now();
+                }
+            }, 2000);
+        };
+        img.onload = function() {
+            // Successfully loaded — will continue streaming via multipart/x-mixed-replace
+            img.onerror = arguments.callee.bind(img);
+        };
+        img._currentCamId = camId;
         img.src = '/video_feed/' + camId + '?t=' + Date.now();
         img.style.display = 'block';
         ph.style.display = 'none';
@@ -393,7 +502,7 @@
             return `<div class="mini-card border-l-4 ${colors[z.zone_type]||'border-l-slate-600'} ${isCurrentCam ? 'ring-1 ring-sky-500/30' : ''}">
                 <div class="flex items-center gap-2">
                     <i class="fas ${icons[z.zone_type]||'fa-map-pin'} text-xs ${isCurrentCam ? 'text-sky-400' : 'text-slate-500'}"></i>
-                    <span class="text-sm text-white font-medium">${z.name || labels[z.zone_type] || 'Zone #' + z.id}</span>
+                    <span class="text-sm text-[var(--text-primary)] font-medium">${z.name || labels[z.zone_type] || 'Zone #' + z.id}</span>
                     ${isCurrentCam ? '<span class="ml-auto text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">LIVE</span>' : ''}
                 </div>
                 <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-3">
@@ -432,14 +541,14 @@
                 const retweets = t.metrics?.retweet_count || 0;
                 const icon = isNews ? 'fas fa-newspaper' : 'fab fa-x-twitter';
                 const linkHtml = t.link ? `<a href="${t.link}" target="_blank" class="text-sky-400 hover:text-sky-300 text-[10px] mt-1 inline-block"><i class="fas fa-external-link-alt mr-1"></i>Baca selengkapnya</a>` : '';
-                return `<div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800/50 hover:border-slate-700/50 transition">
+                return `<div class="p-3 rounded-lg bg-[var(--input-surface)] dark:bg-slate-900/40 border border-[var(--border-color)] hover:border-sky-500/30 transition">
                     <div class="flex items-start gap-2.5">
-                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0">
+                        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
                             ${t.author_avatar ? `<img src="${t.author_avatar}" class="w-8 h-8 rounded-full" onerror="this.style.display='none'">` : `<i class="${icon} text-slate-500 text-sm"></i>`}
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5">
-                                <span class="text-xs font-semibold text-white truncate">${t.author_name || 'Sumber'}</span>
+                                <span class="text-xs font-semibold text-[var(--text-primary)] truncate">${t.author_name || 'Sumber'}</span>
                                 <span class="text-[10px] text-slate-600 ml-auto flex-shrink-0">${timeStr}</span>
                             </div>
                             <p class="text-xs text-slate-300 mt-1 leading-relaxed">${t.text || ''}</p>
@@ -493,13 +602,12 @@
     function setActivePeriod(p){
         currentPeriod = p;
         document.querySelectorAll('#period-group .period-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.period === p);
             if (b.dataset.period === p) {
-                b.classList.add('bg-sky-600','text-white');
-                b.classList.remove('text-slate-300');
+                b.classList.add('bg-slate-900', 'dark:bg-white', 'text-white', 'dark:text-slate-900', 'shadow-sm');
+                b.classList.remove('text-slate-500', 'hover:bg-slate-100', 'dark:hover:bg-slate-800');
             } else {
-                b.classList.remove('bg-sky-600','text-white');
-                b.classList.add('text-slate-300');
+                b.classList.remove('bg-slate-900', 'dark:bg-white', 'text-white', 'dark:text-slate-900', 'shadow-sm');
+                b.classList.add('text-slate-500', 'hover:bg-slate-100', 'dark:hover:bg-slate-800');
             }
         });
     }
@@ -523,10 +631,15 @@
         const ctx = document.getElementById('chart-hour').getContext('2d');
         const labels = Array.from({length:24}, (_,i)=> String(i).padStart(2,'0')+':00');
         if (chartHour) chartHour.destroy();
+        
+        const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+        const tickColor = isDark ? '#94a3b8' : '#475569';
+        const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+        
         chartHour = new Chart(ctx, {
             type: 'bar',
             data: { labels, datasets: [{ label:'Violations', data:data, backgroundColor:'rgba(239,68,68,0.55)', borderColor:'rgba(239,68,68,0.9)', borderWidth:1 }]},
-            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}} }
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:tickColor}, grid:{color:gridColor}},y:{ticks:{color:tickColor}, grid:{color:gridColor}}} }
         });
     }
 
@@ -534,17 +647,32 @@
         const ctx = document.getElementById('chart-dow').getContext('2d');
         const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         if (chartDow) chartDow.destroy();
+        
+        const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+        const tickColor = isDark ? '#94a3b8' : '#475569';
+        const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+        
         chartDow = new Chart(ctx, {
             type: 'bar',
             data: { labels, datasets: [{ label:'Violations', data:data, backgroundColor:'rgba(16,185,129,0.5)', borderColor:'rgba(16,185,129,0.9)', borderWidth:1 }]},
-            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}} }
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:tickColor}, grid:{color:gridColor}},y:{ticks:{color:tickColor}, grid:{color:gridColor}}} }
         });
+    }
+
+    function updateMapTiles() {
+        if (!heatmap) return;
+        if (tileLayer) heatmap.removeLayer(tileLayer);
+        const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+        const tileUrl = isDark 
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+            : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+        tileLayer = L.tileLayer(tileUrl, { maxZoom:19, attribution:'© OpenStreetMap © CARTO' }).addTo(heatmap);
     }
 
     function ensureMap(){
         if (heatmap) return;
         heatmap = L.map('heatmap', { zoomControl:true }).setView([-6.2, 106.816], 11);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap © CARTO' }).addTo(heatmap);
+        updateMapTiles();
         markersLayer = L.layerGroup().addTo(heatmap);
     }
 
@@ -599,7 +727,7 @@
                 <td class="py-2 px-2">${r.camera_name || r.camera_id}</td>
                 <td class="py-2 px-2 text-right">${r.violations_per_day}</td>
                 <td class="py-2 px-2 text-right">${types || '-'}</td>
-                <td class="py-2 px-2 text-right font-semibold text-white">${r.score}</td>
+                <td class="py-2 px-2 text-right font-semibold text-[var(--text-primary)]">${r.score}</td>
                 <td class="py-2 px-2">${badge}</td>
             </tr>`;
         }).join('');
@@ -631,24 +759,29 @@
         const d = await r.json();
         const body = document.getElementById('violations-body');
         if (d.status !== 'success' || !d.violations || d.violations.length === 0) {
-            body.innerHTML = '<tr><td colspan="8" class="text-center text-slate-500 py-6">No violations recorded for this period.</td></tr>';
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 dark:text-slate-500 py-10 text-xs"><i class="fas fa-inbox text-2xl block mb-2 opacity-40"></i>No violations recorded for this period.</td></tr>';
             document.getElementById('violations-info').textContent = 'No data';
             document.getElementById('page-prev').disabled = true;
             document.getElementById('page-next').disabled = true;
             return;
         }
         totalViolations = d.total || d.violations.length;
-        body.innerHTML = d.violations.map(v => `
-            <tr class="border-t border-slate-800/60 hover:bg-slate-800/40">
-                <td class="py-2 px-2 whitespace-nowrap text-xs">${fmtTime(v.timestamp)}</td>
-                <td class="py-2 px-2 text-xs">${v.camera_name || v.camera_id}</td>
-                <td class="py-2 px-2"><span class="${chipClass(v.violation_type)}">${prettyType(v.violation_type)}</span></td>
-                <td class="py-2 px-2 font-mono text-slate-200 text-xs tracking-wider">${v.plate_text || '<span class="text-slate-600">—</span>'}</td>
-                <td class="py-2 px-2 text-xs capitalize">${v.vehicle_class || '—'}</td>
-                <td class="py-2 px-2 text-right tabular-nums text-xs">${formatDuration(v.duration_s)}</td>
-                <td class="py-2 px-2"><span class="inline-flex items-center gap-1 text-xs ${statusClass(v.status)}">${statusIcon(v.status)} ${statusLabel(v.status)}</span></td>
-                <td class="py-2 px-2">
-                    <button data-id="${v.id}" class="btn-view px-2.5 py-1 rounded-md bg-sky-600/20 hover:bg-sky-600/40 text-xs text-sky-300 border border-sky-600/30">
+        body.innerHTML = d.violations.map((v, i) => `
+            <tr class="${i % 2 === 0 ? 'bg-slate-50/50 dark:bg-slate-900/30' : ''} hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors">
+                <td class="py-2.5 px-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${fmtTime(v.timestamp)}</td>
+                <td class="py-2.5 px-3 text-xs text-slate-700 dark:text-slate-300">${v.camera_name || v.camera_id}</td>
+                <td class="py-2.5 px-3"><span class="${chipClass(v.violation_type)}">${prettyType(v.violation_type)}</span></td>
+                <td class="py-2.5 px-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-mono font-semibold text-slate-800 dark:text-slate-100 text-xs tracking-wider">${v.plate_text || '—'}</span>
+                        ${v.plate_confidence && v.plate_confidence > 0 ? `<span class="text-[9px] font-bold px-1 py-0.5 rounded ${v.plate_confidence >= 0.9 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : v.plate_confidence >= 0.8 ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400' : v.plate_confidence >= 0.7 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}">${Math.round(v.plate_confidence * 100)}%</span>` : ''}
+                    </div>
+                </td>
+                <td class="py-2.5 px-3 text-xs capitalize text-slate-600 dark:text-slate-400">${v.vehicle_class || '—'}</td>
+                <td class="py-2.5 px-3 text-right tabular-nums text-xs text-slate-600 dark:text-slate-400">${formatDuration(v.duration_s)}</td>
+                <td class="py-2.5 px-3"><span class="inline-flex items-center gap-1 text-xs ${statusClass(v.status)}">${statusIcon(v.status)} ${statusLabel(v.status)}</span></td>
+                <td class="py-2.5 px-3 text-center">
+                    <button data-id="${v.id}" class="btn-view px-2.5 py-1 rounded-md bg-sky-600/15 hover:bg-sky-600/30 text-xs text-sky-600 dark:text-sky-400 border border-sky-600/20 transition-colors">
                         <i class="fas fa-eye mr-1"></i>Detail
                     </button>
                 </td>
@@ -700,15 +833,206 @@
         // Evidence image
         document.getElementById('em-img').src = v.evidence_path ? ('/evidence/' + v.evidence_path) : '';
 
-        // Info cards
-        document.getElementById('em-plate').textContent = v.plate_text || '—';
-        document.getElementById('em-vehicle').textContent = v.vehicle_class || '—';
-        document.getElementById('em-location').textContent = (v.lat && v.lng) ? `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}` : (v.camera_name || '-');
+        // Info cards - use AI vehicle details if available, otherwise fall back to basic fields
+        // Check vehicle_details from parsed notes (preferred) or basic fields
+        const vd = v.vehicle_details || {};
+        
+        // Plat Nomor - prefer from vehicle_details.Plat, then plate_text
+        const plateFromDetails = vd['Plat'] ? vd['Plat'].value : null;
+        const plateDisplay = plateFromDetails || v.plate_text || '—';
+        document.getElementById('em-plate').textContent = plateDisplay;
+        
+        // Vehicle class - prefer from vehicle_details.Jenis, then vehicle_class
+        const vtypeFromDetails = vd['Jenis'] ? vd['Jenis'].value : null;
+        const vtypeDisplay = vtypeFromDetails || v.vehicle_class || '—';
+        document.getElementById('em-vehicle').textContent = vtypeDisplay;
+        
+        document.getElementById('em-location').textContent = (v.lat && v.lng) ? `${Number(v.lat).toFixed(5)}, ${Number(v.lng).toFixed(5)}` : (v.camera_name || '-');
 
         // Duration formatting
         const dur = Math.round(v.duration_s || 0);
         const durText = dur >= 60 ? `${Math.floor(dur/60)}m ${dur%60}s` : `${dur}s`;
         document.getElementById('em-duration').textContent = durText;
+
+        // Reset all fields first
+        ['em-vtype', 'em-make', 'em-color', 'em-ai-plate', 'em-company'].forEach(id => {
+            document.getElementById(id).textContent = '—';
+        });
+        ['em-vtype-conf', 'em-make-conf', 'em-color-conf', 'em-ai-plate-conf', 'em-company-conf'].forEach(id => {
+            document.getElementById(id).textContent = '—';
+            document.getElementById(id).className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-700/50 text-slate-400 border border-slate-600/30 shrink-0';
+        });
+        ['em-vtype-bar', 'em-make-bar', 'em-color-bar', 'em-ai-plate-bar', 'em-company-bar'].forEach(id => {
+            document.getElementById(id).style.width = '0%';
+        });
+        document.getElementById('em-conf-bar').style.width = '0%';
+        document.getElementById('em-conf-label').textContent = '—';
+
+        // Plate confidence badge - use confidence from vehicle_details.Plat if available
+        const plateConfEl = document.getElementById('em-plate-conf');
+        const plateConfFromDetails = vd['Plat'] ? vd['Plat'].confidence : null;
+        const plateConfDisplay = plateConfFromDetails !== null ? plateConfFromDetails : (v.plate_confidence || 0);
+        
+        if (plateConfDisplay > 0) {
+            plateConfEl.textContent = `${Math.round(plateConfDisplay)}%`;
+            plateConfEl.classList.remove('hidden');
+            // Color based on confidence level
+            if (plateConfDisplay >= 90) {
+                plateConfEl.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30';
+            } else if (plateConfDisplay >= 80) {
+                plateConfEl.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30';
+            } else if (plateConfDisplay >= 70) {
+                plateConfEl.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30';
+            } else {
+                plateConfEl.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-red-500/20 text-red-700 dark:text-red-300 border border-red-500/30';
+            }
+        } else {
+            plateConfEl.classList.add('hidden');
+        }
+
+        // Vehicle identity details from notes (AI analysis)
+        // Format: "Jenis: MPV (88%) | Merek/Model: Toyota Avanza (85%) | Warna: Biru (85%) | Plat: B 2659 BUC (92%)"
+        const fieldMapping = {
+            'Jenis': { valId: 'em-vtype', confId: 'em-vtype-conf', barId: 'em-vtype-bar', color: 'sky' },
+            'Merek/Model': { valId: 'em-make', confId: 'em-make-conf', barId: 'em-make-bar', color: 'purple' },
+            'Warna': { valId: 'em-color', confId: 'em-color-conf', barId: 'em-color-bar', color: 'amber' },
+            'Plat': { valId: 'em-ai-plate', confId: 'em-ai-plate-conf', barId: 'em-ai-plate-bar', color: 'emerald' },
+            'Perusahaan': { valId: 'em-company', confId: 'em-company-conf', barId: 'em-company-bar', color: 'rose' },
+        };
+        
+        let totalConf = 0, confCount = 0;
+        
+        if (v.notes) {
+            // Parse notes: "Jenis: MPV (88%) | Merek/Model: Toyota Avanza (85%) | ..."
+            // Also supports format without percentage: "Jenis: MPV | Merek/Model: Toyota Avanza | Warna: Hitam"
+            const parts = v.notes.split(' | ');
+            
+            parts.forEach(part => {
+                // Match pattern with percentage: "Field: Value (XX%)"
+                let match = part.match(/^(Jenis|Merek\/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+?)\s*\((\d+)%\)/);
+                let value, conf;
+                if (match) {
+                    value = match[2];
+                    conf = parseInt(match[3]);
+                } else {
+                    // Match without percentage: "Field: Value"
+                    const match2 = part.match(/^(Jenis|Merek\/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+)$/);
+                    if (match2) {
+                        match = match2;
+                        value = match2[2].trim();
+                        conf = 80; // Default confidence when not specified
+                    }
+                }
+                if (match && value && value !== 'N/A' && value !== 'Unknown') {
+                    const field = match[1];
+                    const confNum = conf / 100;
+                    const mapping = fieldMapping[field];
+                    
+                    if (mapping) {
+                        // Set value
+                        document.getElementById(mapping.valId).textContent = value;
+                        
+                        // Set confidence badge
+                        const confEl = document.getElementById(mapping.confId);
+                        confEl.textContent = `${conf}%`;
+                        
+                        // Set confidence bar
+                        const barEl = document.getElementById(mapping.barId);
+                        barEl.style.width = `${conf}%`;
+                        
+                        // Set colors based on confidence level
+                        let colorClass;
+                        if (confNum >= 0.9) {
+                            colorClass = `bg-${mapping.color}-500/20 text-${mapping.color}-700 dark:text-${mapping.color}-300 border border-${mapping.color}-500/30`;
+                            barEl.className = `h-full bg-${mapping.color}-500 rounded-full transition-all duration-500`;
+                        } else if (confNum >= 0.8) {
+                            colorClass = `bg-${mapping.color}-500/15 text-${mapping.color}-600 dark:text-${mapping.color}-200 border border-${mapping.color}-500/20`;
+                            barEl.className = `h-full bg-${mapping.color}-400 rounded-full transition-all duration-500`;
+                        } else if (confNum >= 0.7) {
+                            colorClass = `bg-amber-500/15 text-amber-700 dark:text-amber-200 border border-amber-500/20`;
+                            barEl.className = `h-full bg-amber-500 rounded-full transition-all duration-500`;
+                        } else {
+                            colorClass = `bg-red-500/15 text-red-700 dark:text-red-200 border border-red-500/20`;
+                            barEl.className = `h-full bg-red-500 rounded-full transition-all duration-500`;
+                        }
+                        confEl.className = `text-[10px] font-bold px-1.5 py-0.5 rounded-md ${colorClass} shrink-0`;
+                        
+                        totalConf += confNum;
+                        confCount++;
+                    }
+                }
+            });
+        }
+        
+        // Also populate vehicle_class if available (from YOLO) - but only if not already set from AI
+        if (v.vehicle_class && document.getElementById('em-vtype').textContent === '—') {
+            document.getElementById('em-vtype').textContent = v.vehicle_class;
+            document.getElementById('em-vtype-conf').textContent = 'YOLO';
+            document.getElementById('em-vtype-conf').className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-600/50 text-slate-400 border border-slate-500/30 shrink-0';
+            document.getElementById('em-vtype-bar').style.width = '80%';
+            document.getElementById('em-vtype-bar').className = 'h-full bg-slate-500 rounded-full transition-all duration-500';
+            totalConf += 0.80;
+            confCount++;
+        }
+        
+        // Also populate plate_text if AI plate not set and we have basic plate
+        if (v.plate_text && document.getElementById('em-ai-plate').textContent === '—') {
+            document.getElementById('em-ai-plate').textContent = v.plate_text;
+            const plateConf = v.plate_confidence ? Math.round(v.plate_confidence * 100) : 70;
+            document.getElementById('em-ai-plate-conf').textContent = v.plate_confidence ? `${plateConf}%` : 'OCR';
+            document.getElementById('em-ai-plate-conf').className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0';
+            document.getElementById('em-ai-plate-bar').style.width = `${plateConf}%`;
+            document.getElementById('em-ai-plate-bar').className = 'h-full bg-emerald-500 rounded-full transition-all duration-500';
+            totalConf += (v.plate_confidence || 0.7);
+            confCount++;
+        }
+        
+        // Also populate make/model if available from vehicle_class or notes
+        if (v.vehicle_class && v.vehicle_class !== '—' && document.getElementById('em-make').textContent === '—') {
+            // Check if it's a make/model like "Toyota Avanza"
+            if (v.vehicle_class.length > 10 || (v.vehicle_class && /\s/.test(v.vehicle_class))) {
+                document.getElementById('em-make').textContent = v.vehicle_class;
+                document.getElementById('em-make-conf').textContent = 'OCR';
+                document.getElementById('em-make-conf').className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0';
+                document.getElementById('em-make-bar').style.width = '70%';
+                document.getElementById('em-make-bar').className = 'h-full bg-purple-500 rounded-full transition-all duration-500';
+                totalConf += 0.70;
+                confCount++;
+            }
+        }
+        
+        // Also populate color if available from notes or vehicle_info
+        if (v.color && document.getElementById('em-color').textContent === '—') {
+            document.getElementById('em-color').textContent = v.color;
+            document.getElementById('em-color-conf').textContent = '—';
+            document.getElementById('em-color-conf').className = 'text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0';
+            document.getElementById('em-color-bar').style.width = '50%';
+            document.getElementById('em-color-bar').className = 'h-full bg-amber-500 rounded-full transition-all duration-500';
+            totalConf += 0.50;
+            confCount++;
+        }
+        
+        // Update overall confidence bar
+        const avgConf = confCount > 0 ? totalConf / confCount : 0;
+        const confBar = document.getElementById('em-conf-bar');
+        const confLabel = document.getElementById('em-conf-label');
+        confBar.style.width = `${Math.round(avgConf * 100)}%`;
+        confLabel.textContent = confCount > 0 ? `${Math.round(avgConf * 100)}%` : '—';
+        
+        // Color overall bar based on avg confidence
+        if (avgConf >= 0.9) {
+            confBar.className = 'h-full bg-gradient-to-r from-emerald-500 to-sky-400 rounded-full transition-all duration-500';
+            confLabel.className = 'text-[11px] font-bold text-emerald-300 shrink-0 w-12 text-right';
+        } else if (avgConf >= 0.8) {
+            confBar.className = 'h-full bg-gradient-to-r from-sky-500 to-cyan-400 rounded-full transition-all duration-500';
+            confLabel.className = 'text-[11px] font-bold text-sky-300 shrink-0 w-12 text-right';
+        } else if (avgConf >= 0.7) {
+            confBar.className = 'h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-500';
+            confLabel.className = 'text-[11px] font-bold text-amber-300 shrink-0 w-12 text-right';
+        } else if (avgConf > 0) {
+            confBar.className = 'h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full transition-all duration-500';
+            confLabel.className = 'text-[11px] font-bold text-red-300 shrink-0 w-12 text-right';
+        }
 
         // Show modal
         const modal = document.getElementById('evidence-modal');
@@ -754,9 +1078,13 @@
         if (d.status === 'success') { refreshAll(); }
     });
 
-    setActivePeriod('24h');
+    setActivePeriod('30d');
     refreshAll();
     setInterval(refreshAll, 15000);
+    window.addEventListener('themechanged', () => {
+        updateMapTiles();
+        loadSummary();
+    });
 })();
 </script>
 {% endblock %}

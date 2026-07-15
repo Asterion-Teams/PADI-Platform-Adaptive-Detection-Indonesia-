@@ -1,0 +1,27 @@
+{
+  "name": "big-data-traffict-competitiom",
+  "version": "1.0.0",
+  "description": "> **AI Open Innovation Challenge 2026 — Case 1: DISHUB DKI Jakarta** > *Intelligent Traffic Enforcement & Behaviour Analysis (E-TLE)*",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Asterion-Teams/PADI-Platform-Adaptive-Detection-Indonesia-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Asterion-Teams/PADI-Platform-Adaptive-Detection-Indonesia-/issues"
+  },
+  "homepage": "https://github.com/Asterion-Teams/PADI-Platform-Adaptive-Detection-Indonesia-#readme",
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

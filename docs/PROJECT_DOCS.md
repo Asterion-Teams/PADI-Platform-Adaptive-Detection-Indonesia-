@@ -402,7 +402,7 @@ Setiap inference frame:
     │
     ├── 1. Load zona dari DB (refresh setiap 30 detik)
     │
-    ├── 2. Untuk setiap YOLO track yang aktif:
+    ├── 2. Untuk setiap YOLO track yang aktif:![alt text](image.png)
     │       ├── Hitung center point bbox
     │       ├── Cek: apakah center ada di dalam polygon zona?
     │       │       └── Menggunakan ray-casting algorithm (point-in-polygon)

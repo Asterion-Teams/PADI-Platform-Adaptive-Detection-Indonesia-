@@ -145,6 +145,36 @@ async function runOCR() {
                 });
                 html += '</div></div>';
             }
+
+            // Vehicle Identity section
+            if (d.vehicle_identity) {
+                const vi = d.vehicle_identity;
+                html += `<div class="result-card mt-4">
+                    <div class="text-xs text-slate-500 mb-3 flex items-center gap-2">
+                        <i class="fas fa-car text-purple-400"></i> Vehicle Identity
+                    </div>
+                    <div class="space-y-2 text-sm">`;
+                if (vi.company && vi.company !== 'Private') {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">Company:</span><span class="text-white font-semibold">${vi.company}</span></div>`;
+                }
+                if (vi.make_model) {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">Make/Model:</span><span class="text-white">${vi.make_model}</span></div>`;
+                }
+                if (vi.vehicle_type) {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">Type:</span><span class="text-sky-300">${vi.vehicle_type}</span></div>`;
+                }
+                if (vi.color) {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">Color:</span><span class="text-white">${vi.color}</span></div>`;
+                }
+                if (vi.plate && vi.plate !== 'N/A') {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">License Plate:</span><span class="text-emerald-300 font-mono font-bold">${vi.plate}</span></div>`;
+                }
+                if (vi.registration_area) {
+                    html += `<div class="flex items-center gap-2"><span class="text-slate-500 w-28">Registration:</span><span class="text-slate-300">${vi.registration_area}</span></div>`;
+                }
+                html += `</div></div>`;
+            }
+
             document.getElementById('result-area').innerHTML = html;
         } else {
             document.getElementById('result-area').innerHTML = `<div class="result-card text-center text-red-400 text-sm"><i class="fas fa-times-circle mr-1"></i> ${d.message}</div>`;

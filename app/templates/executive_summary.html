@@ -3,7 +3,7 @@
 {% block header_kicker %}Laporan{% endblock %}
 {% block header_title %}Executive Summary{% endblock %}
 {% block header_actions %}
-    <button id="btn-export" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-emerald-500/40">
+    <button id="btn-export" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)] rounded-lg text-sm font-semibold transition-all border border-[var(--border-color)] hover:border-emerald-500/40">
         <i class="fas fa-file-csv text-emerald-300"></i>
         <span>Export CSV</span>
     </button>
@@ -296,8 +296,8 @@
         <span class="text-xs text-slate-400">Periode:</span>
         <div class="flex gap-1.5" id="period-group">
             <button data-period="24h" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition active bg-sky-600 border-sky-500 text-white">Harian (24H)</button>
-            <button data-period="7d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition">Mingguan (7D)</button>
-            <button data-period="30d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition">Bulanan (30D)</button>
+            <button data-period="7d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Mingguan (7D)</button>
+            <button data-period="30d" class="period-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Bulanan (30D)</button>
         </div>
         <span class="ml-auto text-[11px] text-slate-600" id="generated-at">—</span>
     </div>
@@ -305,7 +305,7 @@
     <!-- KPI Cards -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="kpi-card">
-            <div class="kpi-value text-white" id="exec-total">0</div>
+            <div class="kpi-value text-[var(--text-primary)]" id="exec-total">0</div>
             <div class="kpi-label">Total Pelanggaran</div>
         </div>
         <div class="kpi-card">
@@ -324,7 +324,7 @@
 
     <!-- Narrative -->
     <div class="glass-panel p-5">
-        <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+        <h3 class="text-[var(--text-primary)] font-semibold text-sm mb-4 flex items-center gap-2">
             <i class="fas fa-file-lines text-sky-400"></i> Ringkasan Naratif
         </h3>
         <ul id="exec-narrative" class="space-y-2"></ul>
@@ -333,13 +333,13 @@
     <!-- Two-column: breakdown + hotspots -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div class="glass-panel p-5">
-            <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm mb-4 flex items-center gap-2">
                 <i class="fas fa-chart-pie text-amber-400"></i> Breakdown Jenis Pelanggaran
             </h3>
             <div id="exec-bytype" class="space-y-3"></div>
         </div>
         <div class="glass-panel p-5">
-            <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm mb-4 flex items-center gap-2">
                 <i class="fas fa-map-location-dot text-red-400"></i> Hotspot Pelanggaran
             </h3>
             <div id="exec-hotspots"></div>
@@ -348,7 +348,7 @@
 
     <!-- Recommendations -->
     <div class="glass-panel p-5">
-        <h3 class="text-white font-semibold text-sm mb-4 flex items-center gap-2">
+        <h3 class="text-[var(--text-primary)] font-semibold text-sm mb-4 flex items-center gap-2">
             <i class="fas fa-lightbulb text-purple-400"></i> Rekomendasi Enforcement
         </h3>
         <div id="exec-recs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
@@ -418,14 +418,14 @@
             var k = entry[0], v = entry[1];
             var pct = Math.round(v / totalType * 100);
             var color = typeColors[k] || '#64748b';
-            return '<div><div class="flex justify-between items-center mb-1"><span class="text-sm text-slate-200">' + prettyType(k) + '</span><span class="text-sm font-bold text-white">' + v + ' <span class="text-slate-500 text-xs font-normal">(' + pct + '%)</span></span></div><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;background:' + color + '"></div></div></div>';
+            return '<div><div class="flex justify-between items-center mb-1"><span class="text-sm text-[var(--text-secondary)]">' + prettyType(k) + '</span><span class="text-sm font-bold text-[var(--text-primary)]">' + v + ' <span class="text-[var(--text-tertiary)] text-xs font-normal">(' + pct + '%)</span></span></div><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;background:' + color + '"></div></div></div>';
         }).join('') : '<div class="text-slate-500 text-sm">Tidak ada pelanggaran.</div>';
 
         // Hotspots
         const byCam = (d.summary && d.summary.by_camera) || [];
         document.getElementById('exec-hotspots').innerHTML = byCam.length ? byCam.slice(0, 8).map(function(c, i) {
             var medal = i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-600';
-            return '<div class="hotspot-row"><span class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold flex items-center justify-center ' + medal + '">' + (i+1) + '</span><div class="flex-1 min-w-0 truncate text-sm text-slate-200">' + (c.camera_name || c.camera_id) + '</div><div class="text-sm font-bold text-white">' + c.count + '</div></div>';
+            return '<div class="hotspot-row"><span class="w-7 h-7 rounded-full bg-[var(--input-surface)] border border-[var(--border-color)] text-xs font-bold flex items-center justify-center ' + medal + '">' + (i+1) + '</span><div class="flex-1 min-w-0 truncate text-sm text-[var(--text-primary)]">' + (c.camera_name || c.camera_id) + '</div><div class="text-sm font-bold text-[var(--text-primary)]">' + c.count + '</div></div>';
         }).join('') : '<div class="text-slate-500 text-sm py-4 text-center">Tidak ada data hotspot.</div>';
 
         // Recommendations
@@ -435,7 +435,7 @@
             if (rec.recommendation === 'install_etle_camera') actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/20"><i class="fas fa-camera"></i> Pasang E-TLE</span>';
             else if (rec.recommendation === 'officer_patrol') actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/20"><i class="fas fa-user-shield"></i> Patroli Petugas</span>';
             else actionHtml = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-slate-500/15 text-slate-400 border border-slate-500/20"><i class="fas fa-eye"></i> Monitor</span>';
-            return '<div class="mini-card p-3.5"><div class="text-white font-semibold text-sm truncate">' + (rec.camera_name || rec.camera_id) + '</div><div class="flex items-center gap-3 mt-2 text-xs text-slate-400"><span>Skor: <b class="text-white">' + rec.score + '</b></span><span>' + rec.violations_per_day + '/hari</span></div><div class="mt-2.5">' + actionHtml + '</div></div>';
+            return '<div class="mini-card p-3.5"><div class="text-[var(--text-primary)] font-semibold text-sm truncate">' + (rec.camera_name || rec.camera_id) + '</div><div class="flex items-center gap-3 mt-2 text-xs text-[var(--text-secondary)]"><span>Skor: <b class="text-[var(--text-primary)]">' + rec.score + '</b></span><span>' + rec.violations_per_day + '/hari</span></div><div class="mt-2.5">' + actionHtml + '</div></div>';
         }).join('') : '<div class="text-slate-500 text-sm col-span-full text-center py-4">Belum ada rekomendasi.</div>';
     }
 
@@ -446,7 +446,7 @@
                 var isActive = x === b;
                 x.classList.toggle('bg-sky-600', isActive);
                 x.classList.toggle('border-sky-500', isActive);
-                x.classList.toggle('text-white', isActive);
+                x.classList.toggle('text-[var(--text-primary)]', isActive);
                 x.classList.toggle('text-slate-400', !isActive);
                 x.classList.toggle('border-slate-700', !isActive);
             });

@@ -1,1512 +1,1028 @@
 {% extends "base.html" %}
-{% block title %}PADI - Monitor{% endblock %}
-{% block header_kicker %}Monitor{% endblock %}
-{% block header_title %}Live Monitor{% endblock %}
-{% block head_extra %}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-{% endblock %}
+{% block title %}PADI — Intelligent Traffic Enforcement Platform{% endblock %}
+{% block html_class %}scroll-smooth landing-v2 light-mode-only{% endblock %}
+
 {% block style_extra %}
-    <style>
-        .tech-border { position: relative; }
-        .tech-border::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            border-radius: 0.9rem;
-            padding: 1px;
-            background: linear-gradient(45deg, rgba(56, 189, 248, 0.35), rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.35));
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            pointer-events: none;
-        }
-        .live-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            background-color: #ef4444;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
-    </style>
-{% endblock %}
-{% block sidebar_actions %}
-    <div class="space-y-3">
-        <div class="glass-panel p-3">
-            <div class="flex items-center justify-between">
-                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Actions</div>
-                <div class="text-[10px] text-slate-600">Admin</div>
-            </div>
-            <div class="mt-3 grid gap-2">
-                <button onclick="openAddModal()" class="w-full px-3 py-2 bg-slate-900/30 hover:bg-slate-900/55 text-white rounded-xl text-sm font-semibold transition-all flex items-center justify-between border border-white/10 hover:border-sky-400/30">
-                    <span class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-400/20 flex items-center justify-center">
-                            <i class="fas fa-plus text-sky-300"></i>
-                        </span>
-                        <span>Add Camera</span>
-                    </span>
-                    <i class="fas fa-chevron-right text-slate-500"></i>
-                </button>
-                <button onclick="resetData()" class="w-full px-3 py-2 bg-slate-900/30 hover:bg-rose-900/20 text-rose-200 rounded-xl text-sm font-semibold transition-all flex items-center justify-between border border-white/10 hover:border-rose-400/30">
-                    <span class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-400/20 flex items-center justify-center">
-                            <i class="fas fa-trash-alt text-rose-300"></i>
-                        </span>
-                        <span>Reset Data</span>
-                    </span>
-                    <i class="fas fa-chevron-right text-slate-500"></i>
-                </button>
-            </div>
-        </div>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+html.light-mode-only #sidebar, html.light-mode-only header, html.light-mode-only #chatbot-fab, html.light-mode-only .chatbot-panel { display: none !important; }
+html.light-mode-only main { margin-left: 0 !important; }
+html.light-mode-only #main-scroll { padding: 0 !important; }
+html.light-mode-only > body > div.flex { padding: 0 !important; gap: 0 !important; }
+html.light-mode-only body { background: #ffffff !important; color: #0f172a !important; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important; }
+html.light-mode-only { color-scheme: light; }
 
-        <div class="glass-panel p-3">
-            <div class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Export</div>
-            <div class="mt-3 grid gap-2">
-                <a href="/metrics" target="_blank" class="w-full px-3 py-2 bg-slate-900/25 hover:bg-slate-900/55 text-slate-100 rounded-xl text-sm font-semibold transition-all flex items-center justify-between border border-white/10 hover:border-sky-400/30">
-                    <span class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-400/20 flex items-center justify-center">
-                            <i class="fas fa-chart-line text-sky-300"></i>
-                        </span>
-                        <span>Prometheus</span>
-                    </span>
-                    <i class="fas fa-arrow-up-right-from-square text-slate-500 text-xs"></i>
-                </a>
-                <a href="/export/csv" target="_blank" class="w-full px-3 py-2 bg-slate-900/25 hover:bg-slate-900/55 text-slate-100 rounded-xl text-sm font-semibold transition-all flex items-center justify-between border border-white/10 hover:border-emerald-400/25">
-                    <span class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-400/20 flex items-center justify-center">
-                            <i class="fas fa-file-csv text-emerald-300"></i>
-                        </span>
-                        <span>Export CSV</span>
-                    </span>
-                    <i class="fas fa-arrow-up-right-from-square text-slate-500 text-xs"></i>
-                </a>
-                <button onclick="openExportModal()" class="w-full px-3 py-2 bg-slate-900/25 hover:bg-slate-900/55 text-slate-100 rounded-xl text-sm font-semibold transition-all flex items-center justify-between border border-white/10 hover:border-amber-400/25">
-                    <span class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-400/20 flex items-center justify-center">
-                            <i class="fas fa-sliders text-amber-300"></i>
-                        </span>
-                        <span>CSV Custom Range</span>
-                    </span>
-                    <i class="fas fa-chevron-right text-slate-500"></i>
-                </button>
-            </div>
-        </div>
-    </div>
+.lp-v2 { background: #ffffff; color: #0f172a; overflow-x: hidden; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.lpv2-container { max-width: 1280px; margin: 0 auto; padding-left: 1.5rem; padding-right: 1.5rem; }
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+
+/* Nav Bar Styles */
+.lpv2-nav { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; height: 72px; background: #ffffff; border-bottom: 1px solid #e2e8f0; transition: all 0.3s ease; }
+.lpv2-nav.scrolled { box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+.lpv2-nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; max-width: 1440px; padding: 0 2rem; margin: 0 auto; position: relative; }
+.lpv2-logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+.lpv2-logo-icon { width: 36px; height: 36px; border-radius: 8px; background: #336CEC; display: flex; align-items: center; justify-content: center; }
+.lpv2-logo-icon img { height: 18px; width: auto; filter: brightness(0) invert(1); }
+.lpv2-logo-text { font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 1.4rem; color: #0f172a; letter-spacing: -0.02em; line-height: 1; display: flex; align-items: center; gap: 4px; }
+.lpv2-logo-sub { display: none; }
+
+.lpv2-nav-links { display: flex; align-items: center; gap: 0.5rem; height: 100%; }
+.lpv2-nav-item { position: static; height: 100%; display: flex; align-items: center; }
+.lpv2-nav-item > a { font-size: 0.95rem; font-weight: 600; color: #0f172a; text-decoration: none; padding: 0.5rem 1rem; border-radius: 9999px; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+.lpv2-nav-item > a:hover, .lpv2-nav-item:hover > a { background: #f1f5f9; }
+.lpv2-nav-item > a i { font-size: 0.7rem; color: #64748b; transition: transform 0.2s; }
+.lpv2-nav-item:hover > a i { transform: rotate(180deg); }
+
+/* Mega Menu */
+.lpv2-mega-menu { position: absolute; top: 100%; left: 0; width: 100%; background: #ffffff; border-bottom: 1px solid #e2e8f0; opacity: 0; visibility: hidden; transition: all 0.3s cubic-bezier(0.16,1,0.3,1); box-shadow: 0 20px 40px rgba(0,0,0,0.05); cursor: default; }
+.lpv2-nav-item:hover .lpv2-mega-menu { opacity: 1; visibility: visible; }
+.lpv2-mega-inner { max-width: 1440px; margin: 0 auto; padding: 2.5rem 2rem; display: grid; grid-template-columns: 320px 1fr 400px; gap: 3rem; }
+.mega-col-left { padding-right: 2rem; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+.mega-col-left h3 { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; }
+.mega-col-left p { font-size: 0.95rem; color: #475467; line-height: 1.6; margin-bottom: 1.5rem; }
+.mega-learn-more { font-size: 0.95rem; font-weight: 700; color: #0f172a; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 2.5rem; transition: color 0.2s; }
+.mega-learn-more:hover { color: #336CEC; }
+.mega-partners { margin-top: auto; display: flex; flex-direction: column; gap: 1.25rem; align-items: flex-start; }
+.mega-partners img { height: 28px; width: auto; max-width: 120px; object-fit: contain; filter: grayscale(1) opacity(0.6); transition: all 0.2s; }
+.mega-partners img:hover { filter: none; opacity: 1; }
+
+.mega-mid-title { font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 1.5rem; }
+.mega-mid-grid { display: flex; flex-direction: column; gap: 0.5rem; }
+.mega-mid-item { display: flex; align-items: center; gap: 1.25rem; padding: 1rem; border-radius: 12px; text-decoration: none; transition: background 0.2s; }
+.mega-mid-item:hover { background: #f8fafc; }
+.mega-mid-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+.mega-mid-text h4 { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 4px 0; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
+.mega-mid-text h4 i { font-size: 0.7rem; color: #94a3b8; transition: transform 0.2s; }
+.mega-mid-item:hover .mega-mid-text h4 { color: #336CEC; }
+.mega-mid-item:hover .mega-mid-text h4 i { transform: translateX(4px); color: #336CEC; }
+.mega-mid-text p { font-size: 0.85rem; color: #64748b; margin: 0; }
+
+.mega-col-right { background: #f8fafc; border-radius: 16px; display: flex; align-items: center; justify-content: center; padding: 2rem; text-align: center; color: #94a3b8; font-size: 0.95rem; }
+
+/* Nav Right Items */
+.lpv2-nav-right { display: flex; align-items: center; gap: 1.25rem; height: 100%; }
+.lpv2-lang-switch { display: flex; align-items: center; gap: 0.5rem; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 4px 6px; }
+.lpv2-lang-btn { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; color: #94a3b8; text-decoration: none; transition: all 0.2s; }
+.lpv2-lang-btn img { width: 18px; border-radius: 2px; }
+.lpv2-lang-btn.active { color: #336CEC; }
+.lpv2-lang-btn:hover:not(.active) { color: #0f172a; }
+.lpv2-nav-btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: #0f172a; color: #ffffff; border-radius: 9999px; font-size: 0.95rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+.lpv2-nav-btn:hover { background: #1e293b; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2); }
+
+/* Live Map nav link */
+.lpv2-nav-live { color: #0284c7 !important; font-weight: 700 !important; }
+.lpv2-nav-item:hover .lpv2-nav-live { background: rgba(14,165,233,0.08) !important; }
+.lpv2-nav-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; flex-shrink: 0; box-shadow: 0 0 0 0 rgba(239,68,68,0.6); animation: livePulseNav 1.6s ease-out infinite; }
+@keyframes livePulseNav { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+
+/* Public Live Map Section */
+.lpv2-livemap { position: relative; padding: 110px 0; overflow: hidden;
+    background:
+        radial-gradient(900px circle at 12% 10%, rgba(14,165,233,0.10), transparent 55%),
+        radial-gradient(700px circle at 92% 85%, rgba(99,102,241,0.10), transparent 50%),
+        linear-gradient(180deg, #ffffff 0%, #f4f8fc 100%);
+    border-top: 1px solid #eef2f7; }
+/* Faint map-grid texture behind content */
+.lpv2-livemap::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(15,23,42,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.035) 1px, transparent 1px);
+    background-size: 46px 46px; mask-image: radial-gradient(circle at 50% 40%, #000 30%, transparent 78%); -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 30%, transparent 78%); }
+.lpv2-livemap > .lpv2-container { position: relative; z-index: 1; }
+.lpv2-livemap-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 3.5rem; align-items: center; }
+.lpv2-livemap-tag { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.42rem 0.95rem; border-radius: 9999px; background: rgba(14,165,233,0.09); border: 1px solid rgba(14,165,233,0.22); font-size: 0.72rem; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1.35rem; }
+.lpv2-livemap-tag .dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.6); animation: lmHomePulse 1.6s ease-out infinite; }
+@keyframes lmHomePulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+.lpv2-livemap-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(2rem, 3.6vw, 2.9rem); font-weight: 700; line-height: 1.12; color: #0f172a; letter-spacing: -0.025em; margin-bottom: 1.1rem; }
+.lpv2-livemap-title span { background: linear-gradient(120deg, #0ea5e9, #6366f1); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.lpv2-livemap-desc { font-size: 1.08rem; line-height: 1.7; color: #475467; margin-bottom: 1.75rem; max-width: 520px; }
+.lpv2-livemap-feats { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.9rem; }
+.lpv2-lm-chip { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.85rem; border-radius: 0.7rem; background: #fff; border: 1px solid #e6edf5; font-size: 0.8rem; font-weight: 600; color: #334155; box-shadow: 0 2px 8px rgba(15,23,42,0.04); }
+.lpv2-lm-chip i { color: #0ea5e9; font-size: 0.78rem; }
+.lpv2-livemap-stats { display: flex; gap: 1rem; margin-bottom: 2.1rem; }
+.lpv2-lm-stat { flex: 1; min-width: 0; padding: 1rem 1.1rem; border-radius: 1rem; background: rgba(255,255,255,0.75); border: 1px solid #e6edf5; box-shadow: 0 6px 20px rgba(15,23,42,0.05); backdrop-filter: blur(6px); transition: transform 0.2s, box-shadow 0.2s; }
+.lpv2-lm-stat:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(14,165,233,0.14); }
+.lpv2-lm-stat .v { font-family: 'Space Grotesk', sans-serif; font-size: 1.65rem; font-weight: 800; color: #0f172a; line-height: 1; letter-spacing: -0.01em; }
+.lpv2-lm-stat .l { font-size: 0.72rem; color: #64748b; font-weight: 600; margin-top: 7px; text-transform: uppercase; letter-spacing: 0.03em; }
+.lpv2-livemap-visual { position: relative; }
+.lpv2-livemap-visual::after { content: ""; position: absolute; inset: -30px; z-index: 0; background: radial-gradient(closest-side, rgba(14,165,233,0.18), transparent 75%); filter: blur(10px); }
+.lpv2-lm-frame { position: relative; z-index: 1; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 40px 80px -20px rgba(15,23,42,0.28), 0 0 0 1px rgba(255,255,255,0.6) inset; background: #fff; transition: transform 0.4s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.4s; }
+.lpv2-lm-frame:hover { transform: translateY(-6px); box-shadow: 0 50px 100px -25px rgba(14,165,233,0.35); }
+.lpv2-lm-frame-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1rem; background: linear-gradient(180deg, #ffffff, #f8fafc); border-bottom: 1px solid #eef2f7; }
+.lpv2-lm-dots { display: flex; gap: 6px; }
+.lpv2-lm-dots span { width: 9px; height: 9px; border-radius: 50%; }
+.lpv2-lm-dots span:nth-child(1) { background: #ef4444; }
+.lpv2-lm-dots span:nth-child(2) { background: #eab308; }
+.lpv2-lm-dots span:nth-child(3) { background: #22c55e; }
+.lpv2-lm-url { margin: 0 auto; font-size: 0.75rem; color: #94a3b8; font-family: monospace; display: flex; align-items: center; gap: 5px; }
+.lpv2-lm-live { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 7px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.05em; background: rgba(239,68,68,0.1); color: #dc2626; border: 1px solid rgba(239,68,68,0.22); }
+.lpv2-lm-live .d { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: lmHomePulse 1.6s ease-out infinite; }
+.lpv2-lm-viewport { position: relative; height: 430px; background: #dbe4ef; }
+.lpv2-lm-iframe { width: 100%; height: 100%; border: 0; display: block; pointer-events: none; }
+.lpv2-lm-overlay { position: absolute; inset: 0; z-index: 5; display: flex; align-items: flex-end; justify-content: center; padding: 1.6rem; text-decoration: none; background: linear-gradient(180deg, transparent 55%, rgba(15,23,42,0.20)); transition: background 0.25s; }
+.lpv2-lm-overlay:hover { background: linear-gradient(180deg, rgba(14,165,233,0.06) 0%, rgba(15,23,42,0.34)); }
+.lpv2-lm-overlay span { background: #0f172a; color: #fff; padding: 0.7rem 1.45rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,0.3); display: inline-flex; align-items: center; gap: 0.55rem; transition: transform 0.2s, background 0.2s; }
+.lpv2-lm-overlay:hover span { transform: translateY(-3px); background: linear-gradient(135deg, #0ea5e9, #6366f1); }
+@media (max-width: 1024px) {
+    .lpv2-livemap-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+    .lpv2-livemap-content { text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .lpv2-livemap-feats, .lpv2-livemap-stats { justify-content: center; }
+    .lpv2-livemap-stats { width: 100%; max-width: 480px; }
+}
+@media (max-width: 768px) {
+    .lpv2-livemap { padding: 64px 0; }
+    .lpv2-lm-viewport { height: 330px; }
+    .lpv2-livemap-stats { gap: 0.6rem; }
+    .lpv2-lm-stat { padding: 0.8rem 0.7rem; }
+    .lpv2-lm-stat .v { font-size: 1.35rem; }
+}
+
+/* Hero Section */
+.lpv2-hero { padding: 120px 0 80px; min-height: 680px; position: relative; background: #ffffff; overflow: hidden; }
+.lpv2-hero::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at 50% 50%, rgba(51, 108, 236, 0.04) 0%, transparent 60%); pointer-events: none; z-index: 0; }
+.lpv2-hero::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; opacity: 0.6; }
+.lpv2-hero-inner { position: relative; z-index: 1; display: flex; align-items: center; min-height: 600px; justify-content: space-between; }
+.lpv2-hero .lpv2-container { width: 100%; max-width: 100%; padding-left: max(1.5rem, calc((100% - 1280px) / 2)); padding-right: 0; }
+.lpv2-hero-content { max-width: 620px; flex: 0 0 620px; padding-right: 3rem; position: relative; z-index: 5; }
+.lpv2-hero-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.8rem; border-radius: 9999px; background: rgba(51, 108, 236, 0.08); border: 1px solid rgba(51, 108, 236, 0.15); font-size: 0.78rem; font-weight: 700; color: #336CEC; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1.5rem; }
+.lpv2-hero-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.5rem, 4.5vw, 4.25rem); font-weight: 800; line-height: 1.1; color: #0f172a; letter-spacing: -0.03em; margin-bottom: 1.25rem; }
+.lpv2-hero-title span { background: linear-gradient(135deg, #336CEC, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.lpv2-hero-sub { font-size: 1.15rem; line-height: 1.6; color: #535862; max-width: 580px; margin-bottom: 2rem; }
+.lpv2-hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 3.5rem; }
+
+/* Button Overrides */
+.lpv2-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1.75rem; border-radius: 9999px; font-size: 0.95rem; font-weight: 600; text-decoration: none; transition: all 0.2s ease; cursor: pointer; border: none; }
+.lpv2-btn-primary { background: #336CEC; color: #fff; box-shadow: 0 4px 12px rgba(51, 108, 236, 0.15); }
+.lpv2-btn-primary:hover { background: #2557c7; box-shadow: 0 6px 16px rgba(51, 108, 236, 0.25); transform: translateY(-1px); }
+.lpv2-btn-outline { background: #fff; color: #0f172a; border: 1px solid #d0d5dd; }
+.lpv2-btn-outline:hover { background: #f8fafc; border-color: #98a2b3; transform: translateY(-1px); }
+.lpv2-btn-purple { background: #8b5cf6; color: #fff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15); }
+.lpv2-btn-purple:hover { background: #7c3aed; box-shadow: 0 6px 16px rgba(139, 92, 246, 0.25); transform: translateY(-1px); }
+
+/* Integration Logos Bar */
+.lpv2-hero-trust { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; border-top: 1px solid #f2f4f7; padding-top: 1.5rem; }
+.lpv2-trust-label { font-size: 0.75rem; font-weight: 700; color: #98a2b3; text-transform: uppercase; letter-spacing: 0.05em; }
+.lpv2-trust-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 700; color: #475467; }
+.lpv2-trust-item i { color: #98a2b3; font-size: 0.95rem; }
+
+/* Laptop Visual Column */
+.lpv2-hero-visual { position: relative; flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; animation: fadeSlideUp 1s .2s cubic-bezier(.16,1,.3,1) both; }
+.lpv2-hero-img-wrap { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: flex-end; transition: transform 0.15s ease-out; z-index: 5; }
+.lpv2-hero-img-wrap img { width: 100%; height: auto; max-height: 720px; object-fit: contain; object-position: right center; border-radius: 0; border: none; box-shadow: none; display: block; z-index: 1; }
+.lpv2-hex-bg-pattern { position: absolute; top: -50px; left: -50px; right: -50px; bottom: -50px; z-index: 1; pointer-events: none; opacity: 0.4; }
+
+/* Floating metrics cards in Hero */
+.floating-hero-card { position: absolute; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02); z-index: 10; transition: all 0.3s ease; text-align: left; will-change: transform; -webkit-backdrop-filter: blur(12px); }
+.floating-hero-card:hover { transform: translateY(-3px); box-shadow: 0 24px 48px rgba(0,0,0,0.12); }
+.fh-card-1 { top: 12%; left: -30px; animation: floatLeft 6s ease-in-out infinite; }
+.fh-card-2 { bottom: 18%; right: -30px; animation: floatRight 6s ease-in-out infinite 1.5s; }
+.fh-card-3 { bottom: 5%; left: 40px; animation: floatBottom 6s ease-in-out infinite 3s; }
+.fh-card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+.fh-icon-blue { background: rgba(51, 108, 236, 0.08); color: #336CEC; }
+.fh-icon-emerald { background: rgba(16, 185, 129, 0.08); color: #10B981; }
+.fh-icon-purple { background: rgba(139, 92, 246, 0.08); color: #8B5CF6; }
+.fh-card-label { font-size: 0.72rem; color: #667085; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+.fh-card-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-top: 2px; }
+
+/* Services Capability Section */
+.lpv2-services { margin: 8px; border-radius: 32px; padding: 100px 1rem; background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%); position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,0.02); }
+.lpv2-services::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle at 100% 0%, rgba(51, 108, 236, 0.05) 0%, transparent 40%), radial-gradient(circle at 0% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 40%), radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px); background-size: 100% 100%, 100% 100%, 24px 24px; opacity: 0.6; pointer-events: none; }
+.lpv2-services-wrapper { margin: 0 auto; max-width: 1040px; position: relative; z-index: 2; display: flex; flex-direction: column; }
+.lpv2-services-header { text-align: center; margin-bottom: 4rem; display: flex; flex-direction: column; align-items: center; }
+.lpv2-services-tag { font-size: 0.85rem; font-weight: 700; color: #475467; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.lpv2-services-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 700; line-height: 1.15; color: #0f172a; margin-bottom: 1rem; letter-spacing: -0.02em; max-width: 800px; }
+.lpv2-services-desc { font-size: 1.1rem; line-height: 1.6; color: #475467; max-width: 700px; margin: 0 auto; }
+
+.lpv2-svc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.lpv2-svc-card { background: #ffffff; border-radius: 24px; padding: 2.5rem; transition: transform 0.4s cubic-bezier(0.16,1,0.3,1), box-shadow 0.4s cubic-bezier(0.16,1,0.3,1), border-color 0.4s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.02), inset 0 1px 1px rgba(255,255,255,1); display: flex; flex-direction: column; border: 1px solid rgba(226,232,240,0.8); position: relative; overflow: hidden; z-index: 1; transform: translateZ(0); }
+.lpv2-svc-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 100%); opacity: 0; transition: opacity 0.4s ease; z-index: -1; }
+.lpv2-svc-card:hover { transform: translateY(-6px); box-shadow: 0 24px 48px rgba(51,108,236,0.08), inset 0 1px 1px rgba(255,255,255,1); border-color: rgba(51,108,236,0.1); }
+.lpv2-svc-card:hover::after { opacity: 1; }
+.lpv2-svc-card-header { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.25rem; }
+.lpv2-svc-icon-wrap { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; transition: transform 0.4s ease; }
+.lpv2-svc-card:hover .lpv2-svc-icon-wrap { transform: scale(1.05) rotate(-5deg); }
+.icon-blue { background: linear-gradient(135deg, #f0f6ff 0%, #e0e7ff 100%); color: #336CEC; box-shadow: 0 4px 12px rgba(51,108,236,0.1); }
+.icon-emerald { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #10B981; box-shadow: 0 4px 12px rgba(16,185,129,0.1); }
+.icon-amber { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); color: #f59e0b; box-shadow: 0 4px 12px rgba(245,158,11,0.1); }
+.icon-purple { background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); color: #8B5CF6; box-shadow: 0 4px 12px rgba(139,92,246,0.1); }
+.lpv2-svc-card-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; font-weight: 700; color: #0f172a; margin: 0; letter-spacing: -0.01em; }
+.lpv2-svc-card-desc { font-size: 1rem; line-height: 1.7; color: #475467; margin: 0 0 2rem 0; flex-grow: 1; }
+.lpv2-svc-learn-more { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 700; color: #336CEC; text-decoration: none; transition: all 0.3s ease; align-self: flex-start; padding: 0; border: none; background: transparent; }
+.lpv2-svc-learn-more i { transition: transform 0.3s ease; font-size: 0.85rem; }
+.lpv2-svc-card:hover .lpv2-svc-learn-more { color: #2557c7; }
+.lpv2-svc-card:hover .lpv2-svc-learn-more i { transform: translateX(6px); }
+
+/* Honeycomb Technology Toolkit Section */
+.lpv2-tech-dark { padding: 160px 0 120px; background: #0B0D11; position: relative; z-index: 1; overflow: hidden; color: #ffffff; text-align: center; }
+.lpv2-tech-dark::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(51, 108, 236, 0.08) 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 60%); pointer-events: none; z-index: 1; }
+.lpv2-tech-dark::after { content: ''; position: absolute; inset: 0; background-image: url("data:image/svg+xml,%3Csvg width='56' height='100' viewBox='0 0 56 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='%23ffffff' stroke-width='1'/%3E%3Cpath d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34' fill='none' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E"); opacity: 0.03; pointer-events: none; z-index: 0; }
+.lpv2-tech-tag { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; background: rgba(56, 189, 248, 0.08); padding: 0.4rem 1.1rem; border-radius: 30px; border: 1px solid rgba(56, 189, 248, 0.15); }
+.lpv2-tech-title { font-family: 'Space Grotesk', sans-serif; font-size: 2.5rem; font-weight: 700; color: #ffffff; margin-bottom: 1rem; letter-spacing: -0.02em; }
+.lpv2-tech-desc { font-size: 1.05rem; color: #94a3b8; max-width: 600px; margin: 0 auto 3rem; line-height: 1.6; }
+
+.honeycomb-container { display: flex; flex-direction: column; align-items: center; margin-top: 1rem; position: relative; z-index: 5; }
+.honeycomb-row { display: flex; justify-content: center; gap: 14px; }
+.honeycomb-row.staggered { margin-top: -42px; margin-bottom: -42px; }
+.honeycomb-hex { position: relative; width: 150px; height: 170px; background: var(--tech-color, rgba(255,255,255,0.08)); margin: 10px 5px; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); display: flex; align-items: center; justify-content: center; color: #94a3b8; transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
+.honeycomb-hex::before { content: ''; position: absolute; inset: 1.5px; background: #0B0D11; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); z-index: 1; }
+.honeycomb-hex-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 0.78rem; font-weight: 600; text-align: center; color: #e2e8f0; }
+.hex-icon-wrapper { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.08); transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.hex-icon-wrapper img { width: 32px; height: 32px; object-fit: contain; transition: transform 0.35s; }
+.hex-icon-wrapper i { font-size: 1.8rem; transition: transform 0.35s; color: var(--tech-color); }
+.honeycomb-hex:hover { background: var(--tech-color); transform: translateY(-5px) scale(1.03); }
+.honeycomb-hex:hover .hex-icon-wrapper { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+.honeycomb-hex:hover .hex-icon-wrapper img, .honeycomb-hex:hover .hex-icon-wrapper i { transform: scale(1.15); }
+.honeycomb-hex-label { font-size: 0.8rem; font-weight: 700; color: #e2e8f0; letter-spacing: 0.01em; }
+.honeycomb-hex-role { font-size: 0.62rem; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-top: -4px; }
+
+/* Floating demo images & lines */
+.demo-float-wrap { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.demo-svg-lines { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 1440px; height: 100%; pointer-events: none; }
+.demo-float-item { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 8px; filter: drop-shadow(0 10px 25px rgba(0,0,0,0.08)); z-index: 5; }
+.demo-float-item img { width: 150px; height: 95px; object-fit: cover; border-radius: 12px; border: 3px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.demo-float-label { background: #ffffff; padding: 4px 14px; border-radius: 20px; font-size: 0.65rem; font-weight: 700; color: #475467; box-shadow: 0 2px 6px rgba(0,0,0,0.05); letter-spacing: 0.02em; }
+.demo-f1 { top: 12%; left: calc(50% - 550px); }
+.demo-f2 { top: 40%; left: calc(50% - 630px); }
+.demo-f3 { top: 70%; left: calc(50% - 500px); }
+.demo-f4 { top: 12%; right: calc(50% - 550px); }
+.demo-f5 { top: 40%; right: calc(50% - 630px); }
+.demo-f6 { top: 70%; right: calc(50% - 500px); }
+
+/* Live Simulation Section */
+.lpv2-demo-banner { padding: 120px 0; background: #ffffff; position: relative; z-index: 10; border-top: 1px solid #f2f4f7; }
+.lpv2-demo-inner { position: relative; z-index: 5; text-align: center; }
+.lpv2-demo-live { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.875rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); font-size: 0.72rem; font-weight: 700; color: #10B981; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1.5rem; }
+.lpv2-demo-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #10B981; animation: livePulse 1.5s ease-in-out infinite; }
+.lpv2-demo-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; color: #0f172a; line-height: 1.15; max-width: 800px; margin: 0 auto 1.25rem; }
+.lpv2-demo-sub { font-size: 1.05rem; color: #535862; max-width: 550px; margin: 0 auto 2.5rem; line-height: 1.75; }
+.lpv2-demo-actions { display: flex; gap: 0.875rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0; }
+
+/* Interactive 3D Mockup Wrapper & Frame */
+.lpv2-mockup-wrapper { position: relative; max-width: 960px; margin: 0 auto; z-index: 10; }
+.lpv2-mockup-glow { position: absolute; top: 5%; left: 10%; right: 10%; bottom: -5%; background: radial-gradient(circle, rgba(139, 92, 246, 0.25) 0%, rgba(10, 132, 255, 0.1) 50%, transparent 85%); filter: blur(50px); z-index: -1; pointer-events: none; }
+.lpv2-mockup-frame { background: #1e293b; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 16px; overflow: hidden; box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55), 0 0 40px rgba(10, 132, 255, 0.1); }
+.mockup-header { background: #0f172a; padding: 0.75rem 1.25rem; display: flex; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.06); position: relative; }
+.mockup-dots { display: flex; gap: 6px; position: absolute; left: 1.25rem; }
+.mockup-dots span { width: 9px; height: 9px; border-radius: 50%; }
+.mockup-dots span:nth-child(1) { background: #ef4444; }
+.mockup-dots span:nth-child(2) { background: #eab308; }
+.mockup-dots span:nth-child(3) { background: #22c55e; }
+.mockup-url { margin: 0 auto; background: rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.35rem 3rem; font-size: 0.75rem; color: #94a3b8; font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.05); }
+
+/* Simulated Live Dashboard CSS */
+.sim-dashboard { display: grid; grid-template-columns: 1fr 1.35fr; gap: 1.25rem; padding: 1.25rem; background: #060b13; min-height: 380px; text-align: left; position: relative; z-index: 5; }
+.sim-panel-left { display: flex; flex-direction: column; gap: 1rem; }
+.sim-panel-right { display: flex; flex-direction: column; }
+.sim-card { background: rgba(15, 23, 42, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 1.1rem; position: relative; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
+.card-glow { border-color: rgba(14, 165, 233, 0.25); box-shadow: inset 0 0 16px rgba(14, 165, 233, 0.04), 0 4px 20px rgba(0, 0, 0, 0.2); }
+.sim-card-label { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.06em; }
+.sim-card-value { font-family: 'Space Grotesk', sans-serif; font-size: 2.1rem; font-weight: 800; color: #ffffff; margin-top: 4px; letter-spacing: -0.02em; line-height: 1.1; }
+.sim-card-trend { font-size: 0.72rem; color: #34d399; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+.sim-feed { display: flex; flex-direction: column; gap: 0.6rem; max-height: 190px; overflow: hidden; }
+.sim-feed-item { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #e2e8f0; padding: 0.45rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.04); animation: slideDownFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.feed-time { color: #64748b; font-family: monospace; }
+.feed-tag { font-size: 0.65rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 4px; }
+.tag-red { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.tag-orange { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.tag-emerald { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.feed-cam { color: #94a3b8; margin-left: auto; }
+.sim-grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px); background-size: 24px 24px; background-position: center; z-index: 1; }
+.sim-map-node { position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.3s; }
+.sim-map-node:hover { transform: scale(1.05); }
+.node-pulse { width: 10px; height: 10px; border-radius: 50%; position: relative; background-color: currentColor; }
+.node-pulse::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid currentColor; animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; opacity: 0.75; }
+.node-tooltip { background: #0f172a; color: #fff; font-size: 0.68rem; font-weight: 600; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); white-space: nowrap; opacity: 0.9; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+
+/* Floating cards animations & overrides */
+@keyframes floatLeft { 0%, 100% { transform: translateY(0) translateX(0); } 50% { transform: translateY(-8px) translateX(4px); } }
+@keyframes floatRight { 0%, 100% { transform: translateY(0) translateX(0); } 50% { transform: translateY(8px) translateX(-4px); } }
+@keyframes floatBottom { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+/* CTA Section */
+.lpv2-cta { padding: 100px 0; background: #ffffff; position: relative; }
+.lpv2-cta-wrap { background: linear-gradient(135deg, #f8fafc 0%, #eff4ff 100%); border: 1px solid rgba(255,255,255,0.9); border-radius: 40px; padding: 5rem 4rem; position: relative; overflow: hidden; box-shadow: 0 30px 60px rgba(51, 108, 236, 0.05), inset 0 2px 4px rgba(255,255,255,1); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lpv2-cta-wrap::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle at 10% 20%, rgba(51, 108, 236, 0.08) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 40%); pointer-events: none; }
+.lpv2-cta-inner { position: relative; z-index: 2; max-width: 800px; display: flex; flex-direction: column; align-items: center; }
+.lpv2-cta-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; color: #0f172a; line-height: 1.15; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
+.lpv2-cta-sub { font-size: 1.15rem; color: #475467; max-width: 600px; line-height: 1.6; margin-bottom: 2.5rem; }
+.lpv2-cta-actions { display: flex; align-items: center; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
+.lpv2-cta-btn-white { background: #336CEC; color: #ffffff; font-weight: 700; border-radius: 9999px; padding: 1rem 2rem; font-size: 1.05rem; box-shadow: 0 10px 25px rgba(51, 108, 236, 0.25); border: none; transition: all 0.3s ease; }
+.lpv2-cta-btn-white:hover { background: #2557c7; transform: translateY(-3px); box-shadow: 0 15px 35px rgba(51, 108, 236, 0.35); }
+.lpv2-cta-phone { font-size: 1.15rem; color: #0f172a; text-decoration: none; font-weight: 700; transition: color 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+.lpv2-cta-phone:hover { color: #336CEC; }
+.lpv2-cta-emblem { position: absolute; right: -5%; bottom: -40%; font-size: 30rem; color: rgba(51, 108, 236, 0.03); z-index: 0; pointer-events: none; transform: rotate(-15deg); }
+
+/* Footer */
+.lpv2-footer { background: #0B0D11; color: #94a3b8; padding: 5rem 0 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
+.lpv2-footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 4rem; margin-bottom: 4rem; }
+.lpv2-footer-brand { display: flex; flex-direction: column; gap: 1.25rem; max-width: 320px; }
+.lpv2-footer-logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: #ffffff; font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; font-weight: 700; }
+.lpv2-footer-logo-icon { width: 32px; height: 32px; border-radius: 50%; background: #336CEC; display: flex; align-items: center; justify-content: center; }
+.lpv2-footer-logo-icon img { height: 16px; width: auto; filter: brightness(0) invert(1); }
+.lpv2-footer-desc { font-size: 0.95rem; line-height: 1.6; color: #64748b; }
+.lpv2-footer-heading { color: #ffffff; font-size: 1rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif; margin-bottom: 1.5rem; }
+.lpv2-footer-links { display: flex; flex-direction: column; gap: 0.85rem; }
+.lpv2-footer-links a { color: #94a3b8; text-decoration: none; font-size: 0.95rem; transition: color 0.2s; }
+.lpv2-footer-links a:hover { color: #ffffff; }
+.lpv2-footer-bottom { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 2rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #64748b; flex-wrap: wrap; gap: 1rem; }
+.lpv2-footer-socials { display: flex; align-items: center; gap: 1.25rem; }
+.lpv2-footer-socials a { color: #64748b; font-size: 1.15rem; transition: color 0.2s; }
+.lpv2-footer-socials a:hover { color: #ffffff; }
+
+/* Mobile CTA and Footer Adjustments */
+@media (max-width: 1024px) {
+    .lpv2-footer-top { grid-template-columns: 1fr 1fr; gap: 3rem; }
+}
+@media (max-width: 768px) {
+    .lpv2-footer-top { grid-template-columns: 1fr; gap: 2.5rem; }
+    .lpv2-cta-wrap { padding: 3rem 1.5rem; border-radius: 24px; }
+    .lpv2-cta-title { font-size: 2rem; }
+    .lpv2-cta-actions { flex-direction: column; width: 100%; }
+    .lpv2-cta-btn-white { width: 100%; justify-content: center; }
+    .lpv2-footer-bottom { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+}
+
+/* Reveal transitions on scroll */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-left { opacity: 0; transform: translateX(-24px); transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.reveal-left.visible { opacity: 1; transform: translateX(0); }
+.reveal-right { opacity: 0; transform: translateX(24px); transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.reveal-right.visible { opacity: 1; transform: translateX(0); }
+
+.d1 { transition-delay: 0.05s; }
+.d2 { transition-delay: 0.1s; }
+.d3 { transition-delay: 0.15s; }
+.d4 { transition-delay: 0.2s; }
+
+/* Hamburger Menu Button */
+.lpv2-hamburger { display: none; flex-direction: column; justify-content: center; align-items: center; width: 44px; height: 44px; background: transparent; border: none; cursor: pointer; padding: 0; z-index: 1010; position: relative; }
+.lpv2-hamburger span { display: block; width: 22px; height: 2px; background: #cbd5e1; border-radius: 2px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: absolute; left: 11px; }
+.lpv2-hamburger span:nth-child(1) { top: 14px; }
+.lpv2-hamburger span:nth-child(2) { top: 21px; }
+.lpv2-hamburger span:nth-child(3) { top: 28px; }
+.lpv2-nav.mobile-open .lpv2-hamburger span:nth-child(1) { top: 21px; transform: rotate(45deg); }
+.lpv2-nav.mobile-open .lpv2-hamburger span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.lpv2-nav.mobile-open .lpv2-hamburger span:nth-child(3) { top: 21px; transform: rotate(-45deg); }
+
+/* Mobile Menu Overlay */
+.lpv2-mobile-cta-clone { display: none; }
+
+/* Responsive adjustments */
+
+/* ——— Tablet ≤1024px ——— */
+@media (max-width: 1024px) {
+    .lpv2-hero-inner { flex-direction: column; text-align: center; justify-content: center; min-height: auto; padding: 2rem 0; }
+    .lpv2-hero .lpv2-container { padding-right: max(1.5rem, calc((100% - 1280px) / 2)); }
+    .lpv2-hero-content { max-width: 100%; flex: unset; padding-right: 0; display: flex; flex-direction: column; align-items: center; }
+    .lpv2-hero-actions { justify-content: center; }
+    .lpv2-hero-trust { justify-content: center; }
+    .lpv2-hero-visual { width: 100%; height: 320px; margin-top: 2rem; }
+    .lpv2-hero-img-wrap { justify-content: center; }
+    .lpv2-hero-img-wrap img { object-position: center; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+    .lpv2-services-grid { grid-template-columns: 1fr; gap: 3rem; }
+    .lpv2-svc-grid { grid-template-columns: 1fr 1fr; }
+    .lpv2-cta-inner { grid-template-columns: 1fr; gap: 2rem; text-align: center; }
+    .lpv2-cta-actions { justify-content: center; }
+    .lpv2-demo-banner { padding: 80px 0; }
+    .honeycomb-hex { width: 130px; height: 148px; }
+    .honeycomb-row.staggered { margin-top: -36px; margin-bottom: -36px; }
+    .honeycomb-row { gap: 10px; }
+}
+
+/* ——— Mobile ≤768px ——— */
+@media (max-width: 768px) {
+    /* Hamburger visible */
+    .lpv2-hamburger { display: flex; }
+    /* Hide desktop nav links and CTA */
+    .lpv2-nav-links { display: flex; flex-direction: column; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); padding: 7rem 1.5rem 2rem; gap: 0.25rem; z-index: 999; overflow-y: auto; transform: translateY(-10px); opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1), visibility 0.3s; }
+    .lpv2-nav.mobile-open .lpv2-nav-links { opacity: 1; transform: translateY(0); pointer-events: auto; visibility: visible; }
+    .lpv2-nav-links a { font-size: 1.1rem; padding: 1rem 1.25rem; border-radius: 12px; color: #0f172a; border-bottom: 1px solid #f2f4f7; }
+    .lpv2-nav-links a:hover { background: rgba(51, 108, 236, 0.06); }
+    .lpv2-nav-btn { display: none; }
+    /* Show cloned CTA inside mobile menu */
+    .lpv2-nav.mobile-open .lpv2-mobile-cta-clone { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.85rem 1.375rem; border-radius: 9999px; font-size: 1rem; font-weight: 600; text-decoration: none; background: #0f172a; color: #fff; margin-top: 1rem; justify-content: center; }
+    /* Container */
+    .lpv2-container { padding-left: 1rem; padding-right: 1rem; }
+    /* Hero */
+    .lpv2-hero { padding: 90px 0 50px; min-height: auto; }
+    .lpv2-hero .lpv2-container { padding-left: 1rem; padding-right: 1rem; }
+    .lpv2-hero-title { font-size: clamp(1.75rem, 6vw, 2.5rem); }
+    .lpv2-hero-sub { font-size: 1rem; }
+    .lpv2-hero-visual { height: 240px; margin-top: 1.5rem; }
+    .lpv2-hero-img-wrap img { border-radius: 12px; }
+    .lpv2-hero-trust { gap: 1rem; }
+    .floating-hero-card { display: none !important; }
+    /* Services */
+    .lpv2-services { padding: 40px 0 60px; }
+    .lpv2-services-wrapper { padding: 2rem 1rem; border-radius: 16px; }
+    .lpv2-services-title { font-size: 1.5rem; }
+    .lpv2-services-desc { font-size: 0.95rem; }
+    .lpv2-svc-grid { grid-template-columns: 1fr; }
+    .lpv2-svc-card { }
+    .demo-float-wrap { display: none; }
+    .lpv2-services-images { grid-template-columns: 1fr; }
+    /* Demo */
+    .lpv2-demo-banner { padding: 60px 0; }
+    .lpv2-demo-title { font-size: clamp(1.5rem, 5vw, 2rem); }
+    .lpv2-demo-sub { font-size: 0.95rem; }
+    .lpv2-demo-actions { flex-direction: column; align-items: center; gap: 0.75rem; }
+    .lpv2-demo-actions .lpv2-btn { width: 100%; justify-content: center; max-width: 320px; }
+    /* Sim Dashboard */
+    .sim-dashboard { grid-template-columns: 1fr; min-height: auto; }
+    /* Honeycomb */
+    .lpv2-tech-dark { padding: 60px 0 80px; }
+    .lpv2-tech-title { font-size: 1.75rem; }
+    .lpv2-tech-desc { font-size: 0.95rem; }
+    .honeycomb-hex { width: 110px; height: 125px; }
+    .honeycomb-row { gap: 8px; flex-wrap: wrap; }
+    .honeycomb-row.staggered { margin-top: -30px; margin-bottom: -30px; }
+    .honeycomb-hex-label { font-size: 0.68rem; }
+    .honeycomb-hex-role { font-size: 0.55rem; }
+    .hex-icon-wrapper { width: 40px; height: 40px; }
+    .hex-icon-wrapper img { width: 24px; height: 24px; }
+    .hex-icon-wrapper i { font-size: 1.4rem; }
+    /* CTA */
+    .lpv2-cta { padding: 50px 0; }
+    .lpv2-cta-wrap { padding: 2.5rem 1.5rem; border-radius: 18px; }
+    .lpv2-cta-inner { grid-template-columns: 1fr; text-align: center; gap: 1.5rem; }
+    .lpv2-cta-title { font-size: 1.5rem; }
+    .lpv2-cta-sub { font-size: 0.95rem; }
+    .lpv2-cta-actions { justify-content: center; flex-direction: column; align-items: center; gap: 1rem; }
+    /* Footer */
+    .lpv2-footer-inner { flex-direction: column; text-align: center; gap: 1rem; }
+}
+
+/* ——— Small Mobile ≤480px ——— */
+@media (max-width: 480px) {
+    .lpv2-hero-title { font-size: 1.5rem; }
+    .lpv2-hero-sub { font-size: 0.9rem; }
+    .lpv2-hero-actions { flex-direction: column; width: 100%; }
+    .lpv2-hero-actions .lpv2-btn { width: 100%; justify-content: center; }
+    .lpv2-hero-visual { height: 200px; }
+    .lpv2-services-title { font-size: 1.4rem; }
+    .lpv2-svc-card { padding: 1.25rem; }
+    .lpv2-svc-card-title { font-size: 1rem; }
+    .honeycomb-hex { width: 95px; height: 108px; }
+    .honeycomb-row.staggered { margin-top: -26px; margin-bottom: -26px; }
+    .honeycomb-row { gap: 6px; }
+    .hex-icon-wrapper { width: 34px; height: 34px; }
+    .hex-icon-wrapper img { width: 20px; height: 20px; }
+    .hex-icon-wrapper i { font-size: 1.1rem; }
+    .honeycomb-hex-label { font-size: 0.6rem; }
+    .honeycomb-hex-role { font-size: 0.5rem; }
+    .honeycomb-hex-content { gap: 6px; }
+    .lpv2-demo-title { font-size: 1.35rem; }
+    .lpv2-cta-title { font-size: 1.3rem; }
+    .lpv2-cta-wrap { padding: 2rem 1.25rem; }
+    .lpv2-cta-actions .lpv2-btn { width: 100%; justify-content: center; }
+    .lpv2-tech-title { font-size: 1.4rem; }
+    .mockup-url { padding: 0.35rem 1rem; font-size: 0.65rem; }
+}
+</style>
 {% endblock %}
+
 {% block content %}
-    <div class="space-y-6 max-w-7xl mx-auto">
+<div class="lp-v2"><nav class="lpv2-nav" id="lpv2-nav">
+<div class="lpv2-nav-inner">
+<a href="/" class="lpv2-logo">
+<div class="lpv2-logo-icon"><img src="/static/img/logo.png" alt="PADI" onerror="this.style.display='none'"></div>
+<div class="lpv2-logo-text">PADI</div>
+</a>
+<div class="lpv2-nav-links">
+<div class="lpv2-nav-item">
+<a href="#">Services <i class="fas fa-chevron-down"></i></a>
+<div class="lpv2-mega-menu">
+<div class="lpv2-mega-inner">
+<div class="mega-col-left">
+<h3>Traffic Analytics</h3>
+<p>PADI helps you design, deploy, and automate traffic enforcement systems that scale with your city.</p>
+<a href="#capabilities" class="mega-learn-more">Learn more <i class="fas fa-arrow-right"></i></a>
+<div class="mega-partners">
+<img src="/static/img/polri.png" alt="Polri" onerror="this.style.display='none'">
+<img src="/static/img/dishub.png" alt="Dishub" onerror="this.style.display='none'">
+</div>
+</div>
+<div class="mega-col-mid">
+<div class="mega-mid-title">Our Capabilities</div>
+<div class="mega-mid-grid">
+<a href="#" class="mega-mid-item">
+<div class="mega-mid-icon" style="background:#fffbeb;color:#f59e0b;"><i class="fas fa-shield-halved"></i></div>
+<div class="mega-mid-text">
+<h4>Intelligent E-TLE <i class="fas fa-chevron-right"></i></h4>
+<p>Deploy secure, scalable enforcement systems.</p>
+</div>
+</a>
+<a href="#" class="mega-mid-item">
+<div class="mega-mid-icon" style="background:#ecfdf5;color:#10b981;"><i class="fas fa-camera"></i></div>
+<div class="mega-mid-text">
+<h4>Automated ANPR <i class="fas fa-chevron-right"></i></h4>
+<p>High-speed OCR license plate detection.</p>
+</div>
+</a>
+<a href="#" class="mega-mid-item">
+<div class="mega-mid-icon" style="background:#f5f3ff;color:#8b5cf6;"><i class="fas fa-map-location-dot"></i></div>
+<div class="mega-mid-text">
+<h4>Flow &amp; Density <i class="fas fa-chevron-right"></i></h4>
+<p>Spatio-temporal heatmaps &amp; volume counting.</p>
+</div>
+</a>
+</div>
+</div>
+<div class="mega-col-right">
+Select a service in the left side.
+</div>
+</div>
+</div>
+</div>
+<div class="lpv2-nav-item"><a href="#tech">Technology <i class="fas fa-chevron-down"></i></a></div>
+<div class="lpv2-nav-item"><a href="#live-demo">Live Demo <i class="fas fa-chevron-down"></i></a></div>
+<div class="lpv2-nav-item"><a href="/livemap" class="lpv2-nav-live"><span class="lpv2-nav-live-dot"></span> Live Map</a></div>
+<div class="lpv2-nav-item"><a href="/documentation">Documentation <i class="fas fa-chevron-down"></i></a></div>
+<a href="/livemap" class="lpv2-mobile-cta-clone" style="background:#0ea5e9;">Live Map CCTV</a>
+<a href="/dashboard" class="lpv2-mobile-cta-clone">Open Dashboard</a>
+</div>
+<div class="lpv2-nav-right">
+<div class="lpv2-lang-switch">
+<a href="#" class="lpv2-lang-btn active"><img src="https://flagcdn.com/w20/gb.png" alt="EN"> EN</a>
+<a href="#" class="lpv2-lang-btn"><img src="https://flagcdn.com/w20/id.png" alt="ID"> ID</a>
+</div>
+<a href="/dashboard" class="lpv2-nav-btn">Open Dashboard</a>
+<button class="lpv2-hamburger" id="lpv2-hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+</div>
+</div>
+</nav>
+
+<section class="lpv2-hero">
+<div class="lpv2-container">
+<div class="lpv2-hero-inner">
+<div class="lpv2-hero-content">
+<h1 class="lpv2-hero-title">Intelligent &amp; Automated<br><span>Traffic Enforcement</span></h1>
+<p class="lpv2-hero-sub">An integrated computer vision-based smart traffic monitoring system. Optimizing highway surveillance, violation data analysis, and real-time Automatic Number Plate Recognition (ANPR).</p>
+<div class="lpv2-hero-actions">
+<a href="/dashboard" class="lpv2-btn lpv2-btn-primary"><i class="fas fa-chart-line"></i> Open Monitoring Dashboard</a>
+<a href="#capabilities" class="lpv2-btn lpv2-btn-outline">Explore Solutions</a>
+</div>
+</div>
+
+<div class="lpv2-hero-visual">
+<div class="lpv2-hero-img-wrap" id="hero-tilt">
+<img src="/static/img/hero_dashboard.png" alt="PADI Dashboard Preview">
+<div class="floating-hero-card fh-card-1">
+<div class="fh-card-icon fh-icon-blue"><i class="fas fa-video"></i></div>
+<div><div class="fh-card-label">Cam Sources</div><div class="fh-card-value" id="hero-cam-count" data-target="122">0</div></div>
+</div>
+<div class="floating-hero-card fh-card-2">
+<div class="fh-card-icon fh-icon-emerald"><i class="fas fa-exclamation-triangle"></i></div>
+<div><div class="fh-card-label">Violations Detected</div><div class="fh-card-value" id="hero-violation-count" data-target="1807">0</div></div>
+</div>
+<div class="floating-hero-card fh-card-3">
+<div class="fh-card-icon fh-icon-purple"><i class="fas fa-chart-area"></i></div>
+<div><div class="fh-card-label">Congestion Data</div><div class="fh-card-value" data-target="295300">0</div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="lpv2-services" id="capabilities">
+<div class="lpv2-container">
+<div class="lpv2-services-wrapper reveal">
+<div class="lpv2-services-header">
+<div class="lpv2-services-tag">Enforcement &amp; Analytics Features We Offer</div>
+<h2 class="lpv2-services-title">Building Scalable and Intelligent<br>Traffic Surveillance Systems.</h2>
+</div>
+
+<div class="lpv2-svc-grid d1">
+<div class="lpv2-svc-card">
+<div class="lpv2-svc-card-header">
+<div class="lpv2-svc-icon-wrap icon-blue"><i class="fas fa-barcode"></i></div>
+<h3 class="lpv2-svc-card-title">Automated ANPR</h3>
+</div>
+<p class="lpv2-svc-card-desc">High-speed OCR-based Automatic Number Plate Recognition optimized for regional Indonesian license plates, ensuring highly accurate vehicle identification.</p>
+<a href="#" class="lpv2-svc-learn-more">Learn more <i class="fas fa-arrow-right"></i></a>
+</div>
+<div class="lpv2-svc-card">
+<div class="lpv2-svc-card-header">
+<div class="lpv2-svc-icon-wrap icon-amber"><i class="fas fa-shield-halved"></i></div>
+<h3 class="lpv2-svc-card-title">Intelligent E-TLE</h3>
+</div>
+<p class="lpv2-svc-card-desc">Automated identification of traffic violations including busway lane intrusion, illegal parking, wrong-way driving, and helmet detection.</p>
+<a href="#" class="lpv2-svc-learn-more">Learn more <i class="fas fa-arrow-right"></i></a>
+</div>
+<div class="lpv2-svc-card">
+<div class="lpv2-svc-card-header">
+<div class="lpv2-svc-icon-wrap icon-emerald"><i class="fas fa-map-location-dot"></i></div>
+<h3 class="lpv2-svc-card-title">Flow &amp; Density</h3>
+</div>
+<p class="lpv2-svc-card-desc">Real-time vehicle volume counting and congestion hotspot visualization using interactive spatio-temporal heatmaps for traffic management.</p>
+<a href="#" class="lpv2-svc-learn-more">Learn more <i class="fas fa-arrow-right"></i></a>
+</div>
+<div class="lpv2-svc-card">
+<div class="lpv2-svc-card-header">
+<div class="lpv2-svc-icon-wrap icon-purple"><i class="fas fa-robot"></i></div>
+<h3 class="lpv2-svc-card-title">AI Report Integration</h3>
+</div>
+<p class="lpv2-svc-card-desc">Direct integration with the local AI assistant (LLM) for rapid queries on enforcement statistics, predictive analytics, and instant report drafting.</p>
+<a href="#" class="lpv2-svc-learn-more">Learn more <i class="fas fa-arrow-right"></i></a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="lpv2-demo-banner" id="live-demo">
+<div class="demo-particles" id="demo-particles"></div>
+<div class="demo-float-wrap">
+    <svg class="demo-svg-lines" viewBox="0 0 1440 900" preserveAspectRatio="none">
+        <path d="M 245,155 C 330,150 400,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
+        <path d="M 165,407 C 260,400 360,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
+        <path d="M 295,677 C 360,650 410,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
         
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- Left Column: Location List (Dashboard Style) -->
-            <div class="lg:col-span-1 space-y-4">
-                <div class="glass-panel p-4">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Available Cameras</h3>
-                        <button onclick="openAddModal()" class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded transition-colors" title="Add New Camera">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    </div>
-                    <div id="camera-list" class="space-y-3 overflow-y-auto pr-2 custom-scrollbar max-h-[55vh] lg:max-h-[880px]">
-                        <!-- Camera Items will be injected here -->
-                        <div class="animate-pulse flex space-x-4">
-                            <div class="rounded-full bg-slate-700 h-10 w-10"></div>
-                            <div class="flex-1 space-y-2 py-1">
-                                <div class="h-2 bg-slate-700 rounded"></div>
-                                <div class="space-y-3">
-                                    <div class="grid grid-cols-3 gap-4">
-                                        <div class="h-2 bg-slate-700 rounded col-span-2"></div>
-                                        <div class="h-2 bg-slate-700 rounded col-span-1"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <path d="M 1195,155 C 1110,150 1040,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
+        <path d="M 1275,407 C 1180,400 1080,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
+        <path d="M 1145,677 C 1080,650 1030,650 720,650" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6"/>
+        
+        <circle r="4" fill="#336CEC"><animateMotion dur="4s" repeatCount="indefinite" path="M 245,155 C 330,150 400,650 720,650"/></circle>
+        <circle r="4" fill="#336CEC"><animateMotion dur="3.5s" repeatCount="indefinite" path="M 165,407 C 260,400 360,650 720,650"/></circle>
+        <circle r="4" fill="#336CEC"><animateMotion dur="3s" repeatCount="indefinite" path="M 295,677 C 360,650 410,650 720,650"/></circle>
+        <circle r="4" fill="#336CEC"><animateMotion dur="4.5s" repeatCount="indefinite" path="M 1195,155 C 1110,150 1040,650 720,650"/></circle>
+        <circle r="4" fill="#336CEC"><animateMotion dur="3.5s" repeatCount="indefinite" path="M 1275,407 C 1180,400 1080,650 720,650"/></circle>
+        <circle r="4" fill="#336CEC"><animateMotion dur="3s" repeatCount="indefinite" path="M 1145,677 C 1080,650 1030,650 720,650"/></circle>
+    </svg>
+    <div class="demo-float-item demo-f1"><img src="/static/img/iso_no_parking.png" alt="No Parking"></div>
+    <div class="demo-float-item demo-f2"><img src="/static/img/iso_busway.png" alt="Busway"></div>
+    <div class="demo-float-item demo-f3"><img src="/static/img/iso_bicycle_lane.png" alt="Bicycle Lane"></div>
+    <div class="demo-float-item demo-f4"><img src="/static/img/iso_lawan_arah.png" alt="Lawan Arah"></div>
+    <div class="demo-float-item demo-f5"><img src="/static/img/iso_bus_stop.png" alt="Bus Stop"></div>
+    <div class="demo-float-item demo-f6"><img src="/static/img/iso_speeding.png" alt="Over Speeding"></div>
+</div>
+<div class="lpv2-container">
+<div class="lpv2-demo-inner">
+<div class="lpv2-demo-live"><span class="lpv2-demo-live-dot"></span>Live System</div>
+<h2 class="lpv2-demo-title">Live System is Running.<br>See it Live.</h2>
+<p class="lpv2-demo-sub">Access the monitoring dashboard, violation detection engine, and intelligent analytics — all in one centralized platform.</p>
+<div class="lpv2-demo-actions">
+<a href="/dashboard" class="lpv2-btn lpv2-btn-primary"><i class="fas fa-rocket"></i> Open Command Center</a>
+<a href="/enforcement" class="lpv2-btn lpv2-btn-purple"><i class="fas fa-shield-halved"></i> View E-TLE</a>
+</div>
+</div>
+<!-- The Mockup Dashboard (Overlaps Banner and Tech Section) -->
+<div class="lpv2-mockup-wrapper" style="margin-top: 4rem; margin-bottom: -150px; position: relative; z-index: 20; max-width: 650px;">
+<div class="lpv2-mockup-glow" style="top: 10%; left: 10%; right: 10%; bottom: 10%; background: radial-gradient(circle, rgba(51, 108, 236, 0.4) 0%, rgba(139, 92, 246, 0.2) 50%, transparent 70%); filter: blur(60px); position: absolute; z-index: -1;"></div>
+<img src="/static/img/live_dashboard_mockup.png" alt="Dashboard" style="width:100%; display:block; border-radius: 12px; border: 4px solid #ffffff; box-shadow: 0 30px 80px rgba(0,0,0,0.2), 0 10px 30px rgba(0,0,0,0.1);">
+</div>
+</div>
+</section>
 
-                <!-- Manual Stream Input (Moved here as fallback) -->
-                <div class="glass-panel p-4">
-                    <h3 class="text-xs font-semibold text-gray-500 mb-2 uppercase">Custom Stream</h3>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                         <input type="text" id="stream-url" placeholder="rtsp:// or http://..." 
-                           class="bg-slate-900/50 border border-slate-600 text-white text-xs rounded focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
-                        <button onclick="updateStream()" class="text-white bg-slate-700 hover:bg-slate-600 rounded px-3 py-2 transition-colors sm:w-auto w-full">
-                            <i class="fas fa-arrow-right"></i>
-                        </button>
-                    </div>
-                </div>
+<section class="lpv2-tech-dark" id="tech">
+<div class="lpv2-container">
+<div class="lpv2-sec-header reveal">
+<div class="lpv2-tech-tag"><i class="fas fa-microchip"></i> Technology Stack</div>
+<h2 class="lpv2-tech-title">Powered by Cutting-Edge Tech</h2>
+<p class="lpv2-tech-desc">High-performance architecture built for scalability, speed, and computer vision detection reliability.</p>
+</div>
 
-                <div class="glass-panel p-4">
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                        <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Quick Stats</h3>
-                        <div class="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900/40 border border-white/5 rounded-lg px-2 py-1">
-                            <i class="fas fa-calendar-day text-slate-500"></i>
-                            <span>Today</span>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-slate-900/35 border border-white/5 rounded-xl p-3">
-                            <div class="text-[10px] text-slate-500 uppercase tracking-wider">Total Vehicles</div>
-                            <div class="mt-1 flex items-end justify-between">
-                                <div class="text-2xl font-bold text-white tabular-nums" id="total-count">0</div>
-                                <i class="fas fa-car-side text-sky-300/60"></i>
-                            </div>
-                        </div>
-                        <div class="bg-slate-900/35 border border-white/5 rounded-xl p-3">
-                            <div class="text-[10px] text-slate-500 uppercase tracking-wider">Cars</div>
-                            <div class="mt-1 flex items-end justify-between">
-                                <div class="text-2xl font-bold text-white tabular-nums" id="count-car">0</div>
-                                <i class="fas fa-car text-emerald-300/60"></i>
-                            </div>
-                            <div class="mt-2 w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-                                <div class="bg-gradient-to-r from-emerald-500 to-emerald-300 h-full rounded-full transition-all duration-500" style="width: 0%" id="bar-car"></div>
-                            </div>
-                        </div>
-                        <div class="bg-slate-900/35 border border-white/5 rounded-xl p-3">
-                            <div class="text-[10px] text-slate-500 uppercase tracking-wider">Motorcycles</div>
-                            <div class="mt-1 flex items-end justify-between">
-                                <div class="text-2xl font-bold text-white tabular-nums" id="count-motorcycle">0</div>
-                                <i class="fas fa-motorcycle text-amber-300/60"></i>
-                            </div>
-                            <div class="mt-2 w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-                                <div class="bg-gradient-to-r from-amber-500 to-yellow-300 h-full rounded-full transition-all duration-500" style="width: 0%" id="bar-motorcycle"></div>
-                            </div>
-                        </div>
-                        <a href="/dashboard" class="bg-slate-900/35 border border-white/5 rounded-xl p-3 hover:bg-slate-900/55 transition-colors flex items-center justify-between">
-                            <div>
-                                <div class="text-[10px] text-slate-500 uppercase tracking-wider">View</div>
-                                <div class="text-sm font-semibold text-white">Dashboard</div>
-                            </div>
-                            <i class="fas fa-arrow-right text-slate-400"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
+<div class="honeycomb-container reveal d1">
+<!-- Row 1: 4 Hexagons -->
+<div class="honeycomb-row">
+<div class="honeycomb-hex" style="--tech-color:#3776ab;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/python.svg" alt="Python"></div>
+<div class="honeycomb-hex-label">Python 3.12</div>
+<div class="honeycomb-hex-role">Core Backend</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#4c00ff;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/ultralytics.svg" alt="YOLOv8"></div>
+<div class="honeycomb-hex-label">YOLOv8 AI</div>
+<div class="honeycomb-hex-role">Object Detection</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#336791;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/postgresql.svg" alt="PostgreSQL"></div>
+<div class="honeycomb-hex-label">PostgreSQL</div>
+<div class="honeycomb-hex-role">Database Engine</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#199900;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/leaflet.png" alt="Leaflet"></div>
+<div class="honeycomb-hex-label">Leaflet Maps</div>
+<div class="honeycomb-hex-role">Geospatial</div>
+</div>
+</div>
+</div>
 
-            <!-- Right Column: Active Monitor & Stats -->
-            <div class="lg:col-span-2 space-y-6">
-                
-                <div class="glass-panel p-4 md:p-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-2 flex-wrap justify-end">
-                            <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
-                            <h2 class="text-sm font-semibold text-slate-200">Live Monitor</h2>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button id="btn-monitor-fullscreen" class="px-3 py-2 rounded-lg bg-slate-900/35 border border-white/10 text-slate-200 hover:bg-slate-900/55 transition-colors text-xs font-semibold flex items-center gap-2">
-                                <i class="fas fa-expand"></i>
-                                <span class="hidden sm:inline">Fullscreen</span>
-                            </button>
-                            <button class="w-10 h-10 rounded-lg bg-slate-900/35 border border-white/10 text-slate-500 cursor-not-allowed" disabled>
-                                <i class="fas fa-gear"></i>
-                            </button>
-                        </div>
-                    </div>
+<!-- Row 2: 3 Hexagons (Staggered) -->
+<div class="honeycomb-row staggered">
+<div class="honeycomb-hex" style="--tech-color:#76b900;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/nvidia.svg" alt="NVIDIA" style="filter:brightness(0) invert(1);"></div>
+<div class="honeycomb-hex-label">CUDA / RTX</div>
+<div class="honeycomb-hex-role">GPU Acceleration</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#5c3ee8;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/opencv.svg" alt="OpenCV"></div>
+<div class="honeycomb-hex-label">OpenCV</div>
+<div class="honeycomb-hex-role">Computer Vision</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#ffffff;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/ollama.svg" alt="Ollama"></div>
+<div class="honeycomb-hex-label">Ollama LLM</div>
+<div class="honeycomb-hex-role">AI Report Engine</div>
+</div>
+</div>
+</div>
 
-                    <div id="monitor-surface" class="relative">
-                <div id="welcome-screen" class="glass-panel h-full min-h-[440px] flex flex-col items-center justify-center text-center p-10 relative overflow-hidden group">
-                    <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-50"></div>
-                    <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all duration-1000"></div>
-                    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl group-hover:bg-purple-500/20 transition-all duration-1000"></div>
-                    <div class="relative z-10 space-y-6 max-w-lg">
-                        <div class="w-24 h-24 mx-auto bg-slate-800/50 rounded-2xl flex items-center justify-center border border-slate-700/50 shadow-xl mb-8 group-hover:scale-110 transition-transform duration-500">
-                            <i class="fas fa-video text-5xl text-blue-400 drop-shadow-[0_0_15px_rgba(96,165,250,0.5)]"></i>
-                        </div>
-                        <h2 class="text-4xl font-bold text-white tracking-tight">Smart Traffic <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">AI Monitor</span></h2>
-                        <div class="grid grid-cols-2 gap-4 mt-8">
-                            <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/30">
-                                <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">System Status</p>
-                                <div class="flex items-center justify-center gap-2"><span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span><span class="text-green-400 font-semibold">Online</span></div>
-                            </div>
-                            <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/30">
-                                 <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">AI Engine</p>
-                                 <p class="text-blue-400 font-semibold">Ready</p>
-                            </div>
-                        </div>
-                        <p class="text-slate-400 text-lg leading-relaxed pt-4">Select a camera from the <span class="text-white font-medium">Available Cameras</span> list to view real-time traffic analysis and statistics.</p>
-                        <div class="pt-8 animate-bounce"><i class="fas fa-chevron-left text-slate-600 text-xl mr-2"></i><span class="text-slate-500 text-sm">Select Camera</span></div>
-                    </div>
-                </div>
+<!-- Row 3: 2 Hexagons -->
+<div class="honeycomb-row">
+<div class="honeycomb-hex" style="--tech-color:#ff6384;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/chartjs.svg" alt="Chart.js"></div>
+<div class="honeycomb-hex-label">Chart.js</div>
+<div class="honeycomb-hex-role">Visualization</div>
+</div>
+</div>
+<div class="honeycomb-hex" style="--tech-color:#ffffff;">
+<div class="honeycomb-hex-content">
+<div class="hex-icon-wrapper"><img src="/static/img/logos/flask.svg" alt="Flask" style="filter:brightness(0) invert(1);"></div>
+<div class="honeycomb-hex-label">Flask</div>
+<div class="honeycomb-hex-role">Web Framework</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
 
-                <!-- Dashboard Content Wrapper (Hidden by Default) -->
-                <div id="camera-dashboard" class="hidden space-y-6">
-                
-                <!-- Video Monitor Header & Toggle -->
-                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                    <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                        <i class="fas fa-video text-blue-500"></i>
-                        <span id="active-camera-name">Active Monitor</span>
-                    </h2>
-                    <button onclick="toggleVideo()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-all text-sm w-full sm:w-auto">
-                        <i class="fas fa-video-slash" id="video-icon"></i>
-                        <span id="video-text">Show Video Monitor</span>
-                    </button>
-                </div>
+<section class="lpv2-livemap" id="livemap">
+<div class="lpv2-container">
+<div class="lpv2-livemap-grid">
+<div class="lpv2-livemap-content reveal-left">
+<div class="lpv2-livemap-tag"><span class="dot"></span> Public Live Map</div>
+<h2 class="lpv2-livemap-title">Pantau CCTV Lalu Lintas<br><span>Secara Langsung</span></h2>
+<p class="lpv2-livemap-desc">Peta CCTV publik menampilkan ribuan titik kamera lalu lintas se-Indonesia. Klik marker untuk melihat lokasi dan memutar live stream secara langsung — terbuka untuk umum, tanpa perlu login.</p>
+<div class="lpv2-livemap-feats">
+<span class="lpv2-lm-chip"><i class="fas fa-tower-broadcast"></i> Live HLS Stream</span>
+<span class="lpv2-lm-chip"><i class="fas fa-map-location-dot"></i> Koordinat Real</span>
+<span class="lpv2-lm-chip"><i class="fas fa-unlock-keyhole"></i> Tanpa Login</span>
+</div>
+<div class="lpv2-livemap-stats">
+<div class="lpv2-lm-stat"><div class="v" id="lm-home-total">1.500+</div><div class="l">Titik CCTV</div></div>
+<div class="lpv2-lm-stat"><div class="v" id="lm-home-cities">90+</div><div class="l">Kota</div></div>
+<div class="lpv2-lm-stat"><div class="v" id="lm-home-stream">1.200+</div><div class="l">Live Stream</div></div>
+</div>
+<a href="/livemap" class="lpv2-btn lpv2-btn-primary"><i class="fas fa-map-location-dot"></i> Buka Live Map</a>
+</div>
+<div class="lpv2-livemap-visual reveal-right">
+<div class="lpv2-lm-frame">
+<div class="lpv2-lm-frame-head">
+<div class="lpv2-lm-dots"><span></span><span></span><span></span></div>
+<div class="lpv2-lm-url"><i class="fas fa-lock" style="font-size:0.65rem;"></i> /livemap</div>
+<span class="lpv2-lm-live"><span class="d"></span> LIVE</span>
+</div>
+<div class="lpv2-lm-viewport">
+<iframe class="lpv2-lm-iframe" src="/livemap" loading="lazy" title="Live Map CCTV" scrolling="no"></iframe>
+<a href="/livemap" class="lpv2-lm-overlay"><span><i class="fas fa-expand"></i> Buka Peta Penuh</span></a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
 
-                <!-- Video Section (Hidden by Default) -->
-                <div id="video-section" class="hidden transition-all duration-300">
-                     <div class="glass-panel p-1 relative overflow-hidden group border border-slate-700/50 shadow-2xl">
-                        <!-- HUD Overlay -->
-                        <div class="absolute inset-0 z-10 pointer-events-none hud-grid opacity-30"></div>
-                        
-                        <!-- Top Bar -->
-                        <div class="absolute top-0 left-0 right-0 z-20 flex justify-between items-start p-4 bg-gradient-to-b from-black/80 to-transparent">
-                            <div class="flex items-center gap-3">
-                                <div class="bg-red-500/20 backdrop-blur-md border border-red-500/50 px-3 py-1 rounded text-xs font-mono text-red-400 flex items-center gap-2 animate-pulse">
-                                    <div class="w-2 h-2 rounded-full bg-red-500"></div>
-                                    REC
-                                </div>
-                                <div class="bg-black/40 backdrop-blur-md border border-white/10 px-3 py-1 rounded text-xs font-mono text-blue-400">
-                                    <i class="fas fa-microchip mr-1"></i> AI ACTIVE
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-xs font-mono text-gray-400" id="video-timestamp">00:00:00:00</div>
-                                <div class="text-[10px] text-gray-500">1080p | 30FPS</div>
-                            </div>
-                        </div>
+<section class="lpv2-cta">
+<div class="lpv2-container">
+<div class="lpv2-cta-wrap reveal">
+<i class="fas fa-shield-halved lpv2-cta-emblem"></i>
+<div class="lpv2-cta-inner">
+<h2 class="lpv2-cta-title">Ready to Modernize Traffic Enforcement?</h2>
+<p class="lpv2-cta-sub">Access the monitoring dashboard, intelligent analytics, and real-time automated violation detection now.</p>
+<div class="lpv2-cta-actions">
+<a href="/dashboard" class="lpv2-btn lpv2-cta-btn-white"><i class="fas fa-rocket"></i> Open Command Center</a>
+<a href="tel:+628123456789" class="lpv2-cta-phone"><i class="fas fa-phone-alt"></i> Contact Hubops</a>
+</div>
+</div>
+</div>
+</div>
+</section>
 
-                        <img id="video-stream" src="{{ url_for('main.video_feed') }}" class="w-full rounded bg-black" alt="Live Stream">
-                        
-                        <!-- Crosshair Center -->
-                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 border border-white/20 rounded-full z-10 pointer-events-none flex items-center justify-center opacity-50">
-                            <div class="w-1 h-1 bg-white/50 rounded-full"></div>
-                        </div>
-                        
-                        <!-- Bottom Info -->
-                        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-6 z-20">
-                            <div class="flex gap-8 items-end">
-                                <div>
-                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Model</p>
-                                    <div class="flex items-center gap-2">
-                                        <i class="fas fa-cube text-blue-500"></i>
-                                        <span class="text-sm font-semibold text-white font-mono">YOLOv8-L</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Confidence</p>
-                                    <div class="flex items-center gap-2">
-                                        <i class="fas fa-bullseye text-green-500"></i>
-                                        <span class="text-sm font-semibold text-green-400 font-mono">0.85+</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Status</p>
-                                    <span class="text-sm font-semibold text-white font-mono" id="fps-counter">LIVE FEED</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+<footer class="lpv2-footer">
+<div class="lpv2-container">
+<div class="lpv2-footer-top">
+<div class="lpv2-footer-brand">
+<a href="/" class="lpv2-footer-logo">
+<div class="lpv2-footer-logo-icon"><img src="/static/img/polri.png" alt="PADI" onerror="this.style.display='none'"></div>
+PADI
+</a>
+<p class="lpv2-footer-desc">Platform Adaptive Deteksi Indonesia (PADI) is a cutting-edge computer vision system designed to automate traffic enforcement and maximize highway safety.</p>
+</div>
+<div>
+<div class="lpv2-footer-heading">Platform</div>
+<div class="lpv2-footer-links">
+<a href="#capabilities">Features</a>
+<a href="/livemap">Live Map CCTV</a>
+<a href="/dashboard">Command Center</a>
+<a href="/enforcement">Smart Enforcement</a>
+<a href="/analysis">Traffic Analysis</a>
+</div>
+</div>
+<div>
+<div class="lpv2-footer-heading">System</div>
+<div class="lpv2-footer-links">
+<a href="/cameras">Camera Management</a>
+<a href="/zones">Zone Configuration</a>
+<a href="/ocr_test">ANPR OCR Test</a>
+<a href="/crm">Violation CRM</a>
+</div>
+</div>
+<div>
+<div class="lpv2-footer-heading">Resources</div>
+<div class="lpv2-footer-links">
+<a href="/documentation">Documentation</a>
+<a href="/operator">Operator Portal</a>
+<a href="/settings">System Settings</a>
+<a href="/login">Admin Login</a>
+</div>
+</div>
+</div>
+<div class="lpv2-footer-bottom">
+<div>&copy; 2026 PADI — Platform Adaptive Detection Indonesia. All rights reserved.</div>
+<div class="lpv2-footer-socials">
+<a href="#"><i class="fab fa-twitter"></i></a>
+<a href="#"><i class="fab fa-linkedin"></i></a>
+<a href="#"><i class="fab fa-github"></i></a>
+<a href="https://avicenafahmi.com" target="_blank"><i class="fas fa-globe"></i></a>
+</div>
+</div>
+</div>
+</footer>
 
-                <!-- Charts Section -->
-                <div class="glass-panel p-2 md:p-6">
-                    <div class="flex justify-between items-center mb-4 px-2 md:px-0">
-                         <h3 class="text-sm font-semibold text-gray-400 uppercase">Activity Trend</h3>
-                         <div class="flex bg-slate-800 rounded-lg p-1">
-                             <button onclick="setChartPeriod('30m')" id="btn-30m" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">30m</button>
-                             <button onclick="setChartPeriod('1h')" id="btn-1h" class="px-3 py-1 text-xs font-medium rounded-md transition-all bg-slate-600 text-white shadow">1h</button>
-                             <button onclick="setChartPeriod('6h')" id="btn-6h" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">6h</button>
-                             <button onclick="setChartPeriod('12h')" id="btn-12h" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">12h</button>
-                             <button onclick="setChartPeriod('24h')" id="btn-24h" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">24h</button>
-                             <button onclick="setChartPeriod('7d')" id="btn-7d" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">7d</button>
-                             <button onclick="setChartPeriod('30d')" id="btn-30d" class="px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white">30d</button>
-                         </div>
-                    </div>
-                    <div class="h-64">
-                        <canvas id="activityChart"></canvas>
-                    </div>
-                </div>
-
-                <!-- Time Window Analysis -->
-                <div class="glass-panel p-2 md:p-6">
-                    <h3 class="text-sm font-semibold text-gray-400 mb-4 uppercase pl-2 md:pl-0">Traffic Volume (Total Passed)</h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-gray-400">
-                            <thead class="text-xs text-gray-400 uppercase bg-slate-700/50">
-                                <tr>
-                                    <th class="px-4 py-2 rounded-l-lg">Period</th>
-                                    <th class="px-4 py-2">Total</th>
-                                    <th class="px-4 py-2">Cars</th>
-                                    <th class="px-4 py-2">Motorcycles</th>
-                                    <th class="px-4 py-2 rounded-r-lg text-right">Avg Density</th>
-                                </tr>
-                            </thead>
-                            <tbody id="stats-table-body">
-                                <tr class="animate-pulse">
-                                    <td colspan="5" class="px-4 py-4 text-center">Loading stats...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Detailed Breakdown Table -->
-                <div class="glass-panel p-2 md:p-6 mt-4">
-                    <div class="flex justify-between items-center mb-4 pl-2 md:pl-0">
-                        <h3 class="text-sm font-semibold text-gray-400 uppercase" id="breakdown-title">Detailed Breakdown</h3>
-                        <button onclick="downloadCSV()" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-2">
-                            <i class="fas fa-download"></i> CSV
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto max-h-96">
-                        <table class="w-full text-sm text-left text-gray-400">
-                            <thead class="text-xs text-gray-400 uppercase bg-slate-700/50 sticky top-0">
-                                <tr>
-                                    <th class="px-4 py-2 rounded-l-lg">Time</th>
-                                    <th class="px-4 py-2">Total</th>
-                                    <th class="px-4 py-2">Cars</th>
-                                    <th class="px-4 py-2">Motorcycles</th>
-                                    <th class="px-4 py-2 rounded-r-lg">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="hourly-table-body">
-                                <tr class="animate-pulse">
-                                    <td colspan="4" class="px-4 py-4 text-center">Loading data...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Export Modal -->
-    <div id="export-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-        <div class="glass-panel w-full max-w-md p-5">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-white font-semibold">Export CSV (Custom Range)</h3>
-                <button onclick="closeExportModal()" class="text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="space-y-3">
-                <div>
-                    <label class="text-xs text-slate-400">Camera</label>
-                    <select id="export-camera" class="w-full bg-slate-900/50 border border-slate-700 rounded px-3 py-2 text-sm text-white">
-                        <option value="all">All Locations</option>
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-xs text-slate-400">Start</label>
-                        <input id="export-start" type="datetime-local" class="w-full bg-slate-900/50 border border-slate-700 rounded px-3 py-2 text-sm text-white">
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-400">End</label>
-                        <input id="export-end" type="datetime-local" class="w-full bg-slate-900/50 border border-slate-700 rounded px-3 py-2 text-sm text-white">
-                    </div>
-                </div>
-            </div>
-            <div class="mt-4 flex justify-end gap-2">
-                <button onclick="closeExportModal()" class="px-3 py-2 bg-slate-800 text-slate-300 rounded">Cancel</button>
-                <button onclick="submitExport()" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded">Download</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Camera Modal -->
-    <div id="add-camera-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="glass-panel p-6 w-full max-w-md mx-4 relative">
-            <h2 class="text-xl font-bold text-white mb-4">Add New Camera</h2>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Camera Name</label>
-                    <input type="text" id="new-cam-name" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Simpang Dago">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Stream URL (.m3u8)</label>
-                    <input type="text" id="new-cam-url" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="https://...">
-                </div>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1 uppercase">Latitude</label>
-                        <input type="text" id="new-cam-lat" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="-6.200000">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-400 mb-1 uppercase">Longitude</label>
-                        <input type="text" id="new-cam-lng" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="106.816666">
-                    </div>
-                </div>
-
-                <div class="pt-4 border-t border-slate-700">
-                    <p class="text-xs text-gray-400 mb-2 uppercase font-semibold">Authentication Required</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs text-gray-400 mb-1 uppercase">Username</label>
-                            <input type="text" id="new-cam-user" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-400 mb-1 uppercase">Password</label>
-                            <input type="password" id="new-cam-pass" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeAddModal()" class="px-4 py-2 rounded text-sm text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">Cancel</button>
-                <button onclick="saveNewCamera()" class="px-4 py-2 rounded text-sm bg-blue-600 text-white hover:bg-blue-500 transition-colors flex items-center gap-2">
-                    <i class="fas fa-save"></i> Save
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script for Clock and Data Fetching -->
-    <!-- Daily Detail Modal -->
-    <div id="daily-detail-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="glass-panel p-6 w-full max-w-5xl mx-4 relative max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-white" id="daily-modal-title">Daily Breakdown</h2>
-                <div class="flex items-center gap-3">
-                    <button onclick="downloadDailyCSV()" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-2">
-                        <i class="fas fa-download"></i> CSV
-                    </button>
-                    <button onclick="closeDailyModal()" class="text-gray-400 hover:text-white transition-colors">
-                        <i class="fas fa-times text-xl"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Top Section: Chart and Summary -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <!-- Line Chart -->
-                <div class="glass-panel p-4 md:col-span-2 h-72">
-                    <canvas id="dailyChart"></canvas>
-                </div>
-                
-                <!-- Day Summary & Donut -->
-                <div class="glass-panel p-4 flex flex-col items-center justify-center relative">
-                    <h3 class="text-sm font-semibold text-gray-400 uppercase mb-2">Day Summary</h3>
-                    <div class="text-3xl font-bold text-white mb-1" id="daily-total-count">0</div>
-                    <div class="text-xs text-gray-500 mb-4">Total Vehicles</div>
-                    
-                    <div class="relative w-32 h-32 mb-4 flex items-center justify-center">
-                        <canvas id="dailyDonutChart" class="relative z-10"></canvas>
-                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div class="text-center">
-                                 <div class="text-[10px] text-gray-400 uppercase tracking-wider">Total</div>
-                                 <div class="text-sm font-bold text-white" id="donut-center-total">0</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Legend -->
-                    <div class="w-full px-4 space-y-2">
-                         <div class="flex justify-between items-center text-xs">
-                             <div class="flex items-center gap-2">
-                                 <span class="w-2 h-2 rounded-full bg-green-400"></span>
-                                 <span class="text-gray-300">Cars</span>
-                             </div>
-                             <span class="text-white font-medium" id="daily-total-cars">0</span>
-                         </div>
-                         <div class="flex justify-between items-center text-xs">
-                             <div class="flex items-center gap-2">
-                                 <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
-                                 <span class="text-gray-300">Motorcycles</span>
-                             </div>
-                             <span class="text-white font-medium" id="daily-total-motors">0</span>
-                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Table -->
-            <div class="glass-panel p-2 md:p-6">
-                <h3 class="text-sm font-semibold text-gray-400 mb-4 uppercase">Hourly Breakdown</h3>
-                <div class="overflow-x-auto max-h-60">
-                    <table class="w-full text-sm text-left text-gray-400">
-                        <thead class="text-xs text-gray-400 uppercase bg-slate-700/50 sticky top-0">
-                            <tr>
-                                <th class="px-4 py-2 rounded-l-lg">Time</th>
-                                <th class="px-4 py-2">Total</th>
-                                <th class="px-4 py-2">Cars</th>
-                                <th class="px-4 py-2 rounded-r-lg">Motorcycles</th>
-                            </tr>
-                        </thead>
-                        <tbody id="daily-modal-table-body">
-                            <!-- Rows -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Reset Data Modal -->
-    <div id="reset-login-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="glass-panel p-6 w-full max-w-sm mx-4 relative">
-            <h2 class="text-xl font-bold text-white mb-4 text-center">Admin Login</h2>
-            <p class="text-xs text-gray-400 mb-4 text-center">Please authenticate to reset data.</p>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Username</label>
-                    <input type="text" id="reset-username" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-red-500 focus:border-red-500">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Password</label>
-                    <input type="password" id="reset-password" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-red-500 focus:border-red-500">
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeResetModal()" class="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="submitReset()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2">
-                    <i class="fas fa-trash-alt"></i> Confirm Reset
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Camera Login Modal -->
-    <div id="delete-login-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="glass-panel p-6 w-full max-w-sm mx-4 relative">
-            <h2 class="text-xl font-bold text-white mb-4 text-center">Confirm Deletion</h2>
-            <p class="text-xs text-gray-400 mb-4 text-center">Admin authentication required to remove camera.</p>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Username</label>
-                    <input type="text" id="del-username" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-red-500 focus:border-red-500">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1 uppercase">Password</label>
-                    <input type="password" id="del-password" class="w-full bg-slate-900/50 border border-slate-600 text-white rounded p-2 focus:ring-red-500 focus:border-red-500">
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeDeleteModal()" class="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="submitDelete()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2">
-                    <i class="fas fa-trash-alt"></i> Delete Camera
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <footer class="fixed bottom-4 right-6 z-40 opacity-50 hover:opacity-100 transition-opacity">
-        <a href="https://avicenafahmi.com" target="_blank" class="text-xs font-mono text-slate-500 hover:text-sky-400 flex items-center gap-2">
-            <span>&copy; avicenafahmi.com</span>
-        </a>
-    </footer>
+</div>
 {% endblock %}
+
 {% block scripts %}
-    <script>
-        // Global State
-        let activeSourceId = null;
-        let cameraToDeleteId = null;
-        let editingCameraId = null;
+<script>
+(function(){
+// Scroll Reveal
+var observer=new IntersectionObserver(function(entries){
+entries.forEach(function(e){
+if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target);}
+});
+},{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.reveal,.reveal-left,.reveal-right,.reveal-scale').forEach(function(el){observer.observe(el);});
 
-        (() => {
-            const btn = document.getElementById('btn-monitor-fullscreen');
-            const target = document.getElementById('monitor-surface');
-            if (!btn || !target) return;
-            btn.addEventListener('click', async () => {
-                try {
-                    if (document.fullscreenElement) await document.exitFullscreen();
-                    else await target.requestFullscreen();
-                } catch (e) {}
+// Nav shadow on scroll
+var nav=document.getElementById('lpv2-nav');
+window.addEventListener('scroll',function(){
+nav.classList.toggle('scrolled',window.scrollY>10);
+},{passive:true});
+
+// Smooth scroll
+document.querySelectorAll('a[href^="#"]').forEach(function(a){
+a.addEventListener('click',function(e){
+e.preventDefault();
+var target=document.querySelector(a.getAttribute('href'));
+if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+});
+});
+
+// Number counter animation
+var counterObserver=new IntersectionObserver(function(entries){
+entries.forEach(function(entry){
+if(entry.isIntersecting){
+        var el=entry.target;
+        var target=parseInt(el.getAttribute('data-target'),10);
+        if(target>0){
+        var duration=1200;
+        var start=performance.now();
+        function update(now){
+        var elapsed=now-start;
+        var progress=Math.min(elapsed/duration,1);
+        var eased=1-Math.pow(1-progress,3);
+        el.textContent=Math.floor(target*eased).toLocaleString('en-US');
+        if(progress<1)requestAnimationFrame(update);
+        }
+        requestAnimationFrame(update);
+        }
+        counterObserver.unobserve(el);
+        }
+    });
+    },{threshold:0.5});
+    document.querySelectorAll('[data-target]').forEach(function(el){counterObserver.observe(el);});
+
+    // Load Stats from API
+    async function loadStats(){
+    try{
+    var resp=await fetch('/api/stats');
+    var data=await resp.json();
+    if(data&&data.sources){
+    var camCount=Object.keys(data.sources).length;
+    if(camCount>0){
+    var camEl=document.getElementById('hero-cam-count');
+    if(camEl)camEl.setAttribute('data-target',camCount);
+    }
+    }
+    }catch(e){}
+    try{
+    var vResp=await fetch('/api/violations/summary?period=24h');
+    var vData=await vResp.json();
+    if(vData&&vData.status==='success'){
+    var total=vData.summary&&vData.summary.total_all_time||vData.summary&&vData.summary.total||0;
+    if(total>0){
+    var vEl=document.getElementById('hero-violation-count');
+    if(vEl)vEl.setAttribute('data-target',total);
+    var fvEl=document.getElementById('float-violations');
+    if(fvEl)fvEl.textContent=total.toLocaleString('en-US');
+    }
+    }
+    }catch(e){}
+    }
+    // 3D Tilt Effect (gentle, no glitch)
+    var tiltEl = document.getElementById('hero-tilt');
+    if(tiltEl && window.innerWidth > 768) {
+        document.addEventListener('mousemove', function(e) {
+            var xAxis = (window.innerWidth / 2 - e.pageX) / 80;
+            var yAxis = (window.innerHeight / 2 - e.pageY) / 100;
+            tiltEl.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+        });
+        document.addEventListener('mouseleave', function() {
+            tiltEl.style.transform = `rotateY(0deg) rotateX(0deg)`;
+        });
+    }
+
+    // Particle Generator
+    var ptcContainer = document.getElementById('demo-particles');
+    if(ptcContainer) {
+        for(var i=0; i<30; i++) {
+            var p = document.createElement('div');
+            p.className = 'demo-particle';
+            p.style.left = Math.random() * 100 + '%';
+            p.style.animationDuration = (Math.random() * 8 + 4) + 's';
+            p.style.animationDelay = (Math.random() * 5) + 's';
+            ptcContainer.appendChild(p);
+        }
+    }
+
+    // Mobile Hamburger Menu Toggle
+    var hamburger = document.getElementById('lpv2-hamburger');
+    var navEl = document.getElementById('lpv2-nav');
+    if (hamburger && navEl) {
+        hamburger.addEventListener('click', function() {
+            navEl.classList.toggle('mobile-open');
+            document.body.style.overflow = navEl.classList.contains('mobile-open') ? 'hidden' : '';
+        });
+        // Close menu when a nav link is clicked
+        document.querySelectorAll('.lpv2-nav-links a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                navEl.classList.remove('mobile-open');
+                document.body.style.overflow = '';
             });
-        })();
-
-        // Helper: Calculate Percentage
-        const getPercent = (val, total) => {
-            if (!total || total === 0) return '0%';
-            return Math.round((val / total) * 100) + '%';
-        };
-
-        const getVideoFeedUrl = () => {
-            if (activeSourceId) return `/video_feed/${activeSourceId}`;
-            return `/video_feed`;
-        };
-
-        // Render Camera List
-        function renderCameraList(sources) {
-            const listContainer = document.getElementById('camera-list');
-            listContainer.innerHTML = '';
-
-            sources.forEach(source => {
-                const isActive = source.active;
-                activeSourceId = isActive ? source.id : activeSourceId;
-                
-                if (isActive) {
-                    document.getElementById('active-camera-name').innerText = source.name;
-                    const videoSection = document.getElementById('video-section');
-                    if (videoSection && !videoSection.classList.contains('hidden')) {
-                        const videoImg = document.getElementById('video-stream');
-                        if (videoImg) videoImg.src = getVideoFeedUrl() + '?t=' + new Date().getTime();
-                    }
-                }
-
-                const item = document.createElement('div');
-                item.className = `group p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all border ${isActive ? 'bg-blue-600/20 border-blue-500/50' : 'bg-slate-800 border-transparent hover:bg-slate-700'}`;
-                
-                // Main Click Area (Switch Source)
-                const infoDiv = document.createElement('div');
-                infoDiv.className = "flex items-center gap-3 flex-1";
-                infoDiv.onclick = () => switchSource(source.id);
-                infoDiv.innerHTML = `
-                    <div class="relative w-10 h-10 rounded-lg flex items-center justify-center ${isActive ? 'bg-blue-600 shadow-lg shadow-blue-500/30' : 'bg-slate-700/50'} transition-all overflow-hidden">
-                        <i class="fas fa-video ${isActive ? 'text-white' : 'text-gray-400'} z-10 relative"></i>
-                        ${isActive ? '<div class="absolute inset-0 bg-blue-500 blur opacity-20 animate-pulse"></div>' : ''}
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h4 class="text-sm font-semibold ${isActive ? 'text-white' : 'text-gray-300'}">${source.name}</h4>
-                            ${isActive ? '<span class="flex h-2 w-2 relative"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>' : ''}
-                        </div>
-                        <div class="flex items-center gap-2 mt-0.5">
-                             <p class="text-[10px] text-gray-500 truncate max-w-[120px] opacity-70">${source.url}</p>
-                        </div>
-                    </div>
-                `;
-
-                // Actions Area
-                const actionDiv = document.createElement('div');
-                actionDiv.className = "flex items-center gap-1"; // tighter gap
-                
-                // Edit Button
-                const editBtn = document.createElement('button');
-                editBtn.className = "text-gray-500 hover:text-blue-400 p-2 rounded-lg hover:bg-slate-700/50 transition-all opacity-0 group-hover:opacity-100";
-                editBtn.title = "Edit Camera";
-                editBtn.innerHTML = '<i class="fas fa-cog text-xs"></i>'; // Changed to cog for pro feel
-                editBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    openEditModal(source);
-                };
-
-                // Delete Button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = "text-gray-500 hover:text-red-500 p-2 rounded-lg hover:bg-slate-700/50 transition-all opacity-0 group-hover:opacity-100";
-                deleteBtn.title = "Delete Camera";
-                deleteBtn.innerHTML = '<i class="fas fa-trash-alt text-xs"></i>';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation(); // Prevent switching source
-                    openDeleteModal(source.id);
-                };
-                
-                actionDiv.appendChild(editBtn);
-                actionDiv.appendChild(deleteBtn);
-                item.appendChild(infoDiv);
-                item.appendChild(actionDiv);
-                
-                listContainer.appendChild(item);
-            });
-        }
-
-        // --- Modal Functions ---
-        function openAddModal() {
-            editingCameraId = null;
-            document.getElementById('add-camera-modal').classList.remove('hidden');
-            document.getElementById('new-cam-name').value = '';
-            document.getElementById('new-cam-url').value = '';
-            document.getElementById('new-cam-lat').value = '';
-            document.getElementById('new-cam-lng').value = '';
-            document.getElementById('new-cam-user').value = '';
-            document.getElementById('new-cam-pass').value = '';
-            document.getElementById('new-cam-name').focus();
-        }
-
-        function openEditModal(source) {
-            editingCameraId = source.id;
-            document.getElementById('add-camera-modal').classList.remove('hidden');
-            document.getElementById('new-cam-name').value = source.name;
-            document.getElementById('new-cam-url').value = source.url;
-            document.getElementById('new-cam-lat').value = source.lat || '';
-            document.getElementById('new-cam-lng').value = source.lng || '';
-            document.getElementById('new-cam-user').value = '';
-            document.getElementById('new-cam-pass').value = '';
-            document.getElementById('new-cam-name').focus();
-        }
-
-        function closeAddModal() {
-            document.getElementById('add-camera-modal').classList.add('hidden');
-            editingCameraId = null;
-        }
-
-        async function saveNewCamera() {
-            const name = document.getElementById('new-cam-name').value.trim();
-            const url = document.getElementById('new-cam-url').value.trim();
-            const lat = document.getElementById('new-cam-lat').value.trim();
-            const lng = document.getElementById('new-cam-lng').value.trim();
-            const username = document.getElementById('new-cam-user').value.trim();
-            const password = document.getElementById('new-cam-pass').value.trim();
-
-            if (!name || !url) {
-                alert("Please fill in both Name and URL");
-                return;
-            }
-            if (!username || !password) {
-                alert("Please fill in Admin credentials");
-                return;
-            }
-
-            const endpoint = editingCameraId ? '/api/edit_camera' : '/api/add_camera';
-            const payload = { 
-                name, url, lat, lng, username, password,
-                id: editingCameraId // ignored if null/add
-            };
-
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    closeAddModal();
-                    fetchSources(); // Refresh list
-                } else {
-                    alert("Error: " + result.message);
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Failed to save camera");
-            }
-        }
-
-        function openDeleteModal(id) {
-            cameraToDeleteId = id;
-            document.getElementById('delete-login-modal').classList.remove('hidden');
-            document.getElementById('del-username').value = '';
-            document.getElementById('del-password').value = '';
-            document.getElementById('del-username').focus();
-        }
-
-        function closeDeleteModal() {
-            document.getElementById('delete-login-modal').classList.add('hidden');
-            cameraToDeleteId = null;
-        }
-
-        async function submitDelete() {
-            if (!cameraToDeleteId) return;
-
-            const username = document.getElementById('del-username').value;
-            const password = document.getElementById('del-password').value;
-            
-            if (!username || !password) {
-                alert("Please enter username and password.");
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/delete_camera', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        id: cameraToDeleteId,
-                        username: username,
-                        password: password
-                    })
-                });
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    closeDeleteModal();
-                    fetchSources(); // Refresh list
-                    setTimeout(() => location.reload(), 500);
-                } else {
-                    alert("Error: " + result.message);
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Failed to delete camera");
-            }
-        }
-
-
-        // Switch Source
-        async function switchSource(id) {
-            activeSourceId = id;
-            // Switch View
-            const welcome = document.getElementById('welcome-screen');
-            const dashboard = document.getElementById('camera-dashboard');
-            if (welcome) welcome.classList.add('hidden');
-            if (dashboard) dashboard.classList.remove('hidden');
-
-            // Optimistic UI Update
-            const items = document.getElementById('camera-list').children;
-            // (Simple reload is better to ensure state sync)
-            const videoSection = document.getElementById('video-section');
-            if (videoSection && !videoSection.classList.contains('hidden')) {
-                const videoImg = document.getElementById('video-stream');
-                if (videoImg) videoImg.src = getVideoFeedUrl() + '?t=' + new Date().getTime();
-            }
-            
-            try {
-                const response = await fetch('/api/switch_source', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: id }),
-                });
-                const result = await response.json();
-                if(result.status === 'success') {
-                    // Refresh List
-                    fetchSources();
-                    // Reset Charts/Stats in UI
-                    resetStatsUI();
-                    setChartPeriod('1h');
-                    // Force reload video if visible
-                    if (!videoSection.classList.contains('hidden')) {
-                         const videoImg = document.getElementById('video-stream');
-                         videoImg.src = getVideoFeedUrl() + '?t=' + new Date().getTime();
-                    }
-                }
-            } catch(e) {
-                console.error(e);
-            }
-        }
-
-        async function fetchSources() {
-            try {
-                const response = await fetch('/api/sources');
-                const sources = await response.json();
-                renderCameraList(sources);
-            } catch (e) { console.error(e); }
-        }
-        
-        // Initial Fetch
-        fetchSources();
-
-        function resetStatsUI() {
-             document.getElementById('total-count').innerText = "0";
-             document.getElementById('count-car').innerText = "0";
-             document.getElementById('count-motorcycle').innerText = "0";
-             // Reset Chart
-             activityChart.data.datasets[0].data = Array(10).fill(0);
-             activityChart.update();
-        }
-
-        // Chart.js Setup
-        const ctx = document.getElementById('activityChart').getContext('2d');
-        const activityChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Traffic Volume',
-                    data: [],
-                    borderColor: '#3b82f6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { 
-                        display: true,
-                        grid: { display: false },
-                        ticks: { color: '#64748b', font: { size: 10 }, maxTicksLimit: 10 }
-                    },
-                    y: { 
-                        display: true, 
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: '#64748b', font: { size: 10 }, beginAtZero: true } 
-                    }
-                }
+        });
+        // Close menu on resize to desktop
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768 && navEl.classList.contains('mobile-open')) {
+                navEl.classList.remove('mobile-open');
+                document.body.style.overflow = '';
             }
         });
+    }
 
-        let chartPeriod = '1h'; // Default to 1h view as requested to be lighter
-        let modalChartInstance = null;
-        let dailyDonutChart = null;
-        let currentModalTs = null;
-
-        function setChartPeriod(period) {
-            chartPeriod = period;
+    // Language Toggle
+    const langBtns = document.querySelectorAll('.lpv2-lang-btn');
+    langBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            langBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
             
-            // Update buttons
-            ['30m', '1h', '6h', '12h', '24h', '7d', '30d'].forEach(p => {
-                const btn = document.getElementById(`btn-${p}`);
-                if (btn) {
-                    btn.className = period === p 
-                        ? "px-3 py-1 text-xs font-medium rounded-md transition-all bg-slate-600 text-white shadow"
-                        : "px-3 py-1 text-xs font-medium rounded-md transition-all text-gray-400 hover:text-white";
-                }
-            });
-                
-            fetchHistory();
-        }
-
-        // Initialize button state for default period
-        document.addEventListener('DOMContentLoaded', () => {
-             setChartPeriod(chartPeriod);
+            const isId = btn.textContent.includes('ID');
+            if (isId) {
+                const elTitle = document.querySelector('.lpv2-hero-title'); if(elTitle) elTitle.innerHTML = 'Sistem Penegakan Lalu Lintas<br><span>Cerdas & Otomatis</span>';
+                const elSub = document.querySelector('.lpv2-hero-sub'); if(elSub) elSub.innerHTML = 'Sistem pemantauan lalu lintas terintegrasi berbasis computer vision. Mengoptimalkan pengawasan jalan, analisis data pelanggaran, dan Pengenalan Plat Nomor Otomatis (ANPR) real-time.';
+                const elBtnPri = document.querySelector('.lpv2-btn-primary'); if(elBtnPri) elBtnPri.innerHTML = '<i class="fas fa-chart-line"></i> Buka Dashboard Monitoring';
+                const elBtnOut = document.querySelector('.lpv2-btn-outline'); if(elBtnOut) elBtnOut.innerHTML = 'Eksplorasi Solusi';
+                const elSvcTag = document.querySelector('.lpv2-services-tag'); if(elSvcTag) elSvcTag.innerHTML = 'Fitur Penegakan & Analitik Kami';
+                const elSvcTitle = document.querySelector('.lpv2-services-title'); if(elSvcTitle) elSvcTitle.innerHTML = 'Membangun Sistem Pengawasan<br>Lalu Lintas yang Skalabel & Cerdas.';
+            } else {
+                const elTitle = document.querySelector('.lpv2-hero-title'); if(elTitle) elTitle.innerHTML = 'Intelligent & Automated<br><span>Traffic Enforcement</span>';
+                const elSub = document.querySelector('.lpv2-hero-sub'); if(elSub) elSub.innerHTML = 'An integrated computer vision-based smart traffic monitoring system. Optimizing highway surveillance, violation data analysis, and real-time Automatic Number Plate Recognition (ANPR).';
+                const elBtnPri = document.querySelector('.lpv2-btn-primary'); if(elBtnPri) elBtnPri.innerHTML = '<i class="fas fa-chart-line"></i> Open Monitoring Dashboard';
+                const elBtnOut = document.querySelector('.lpv2-btn-outline'); if(elBtnOut) elBtnOut.innerHTML = 'Explore Solutions';
+                const elSvcTag = document.querySelector('.lpv2-services-tag'); if(elSvcTag) elSvcTag.innerHTML = 'Enforcement & Analytics Features We Offer';
+                const elSvcTitle = document.querySelector('.lpv2-services-title'); if(elSvcTitle) elSvcTitle.innerHTML = 'Building Scalable and Intelligent<br>Traffic Surveillance Systems.';
+            }
         });
+    });
 
-        function viewDailyDetails(ts, label) {
-             openDailyModal(ts, label);
-        }
-
-        async function openDailyModal(ts, label) {
-            const modal = document.getElementById('daily-detail-modal');
-            const title = document.getElementById('daily-modal-title');
-            
-            modal.classList.remove('hidden');
-            title.innerText = `Detailed Breakdown (${label})`;
-            currentModalTs = ts;
-            
-            // Show loading state
-            const tbody = document.getElementById('daily-modal-table-body');
-            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center">Loading data...</td></tr>';
-            
-            // Reset Summary
-            const elTotal = document.getElementById('daily-total-count');
-            if (elTotal) {
-                document.getElementById('daily-total-count').innerText = '-';
-                document.getElementById('daily-total-cars').innerText = '-';
-                document.getElementById('daily-total-motors').innerText = '-';
-            }
-            
-            try {
-                const response = await fetch(`/api/history?period=custom&start_ts=${ts}`);
-                const data = await response.json();
-                
-                updateDailyModalChart(data);
-                updateDailyModalTable(data);
-                
-            } catch (e) {
-                console.error(e);
-                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-red-500">Failed to load data</td></tr>';
-            }
-        }
-
-        function closeDailyModal() {
-            document.getElementById('daily-detail-modal').classList.add('hidden');
-            currentModalTs = null;
-        }
-
-        function downloadCSV() {
-            let url = `/api/export_csv?period=${chartPeriod}`;
-            if (chartPeriod === 'custom' && currentModalTs) {
-                url += `&start_ts=${currentModalTs}`;
-            }
-            window.location.href = url;
-        }
-
-        function downloadDailyCSV() {
-            if (!currentModalTs) return;
-            const url = `/api/export_csv?period=custom&start_ts=${currentModalTs}`;
-            window.location.href = url;
-        }
-
-        function updateDailyModalChart(data) {
-            const ctx = document.getElementById('dailyChart').getContext('2d');
-            const labels = data.map(d => d.label);
-            const counts = data.map(d => d.count);
-            
-            if (modalChartInstance) {
-                modalChartInstance.destroy();
-            }
-            
-            modalChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Traffic Volume',
-                        data: counts,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { 
-                            display: true,
-                            grid: { display: false },
-                            ticks: { color: '#64748b', font: { size: 10 }, maxTicksLimit: 12 }
-                        },
-                        y: { 
-                            display: true, 
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#64748b', font: { size: 10 }, beginAtZero: true } 
-                        }
-                    }
-                }
-            });
-
-            // Calculate Totals for Summary & Donut
-            let totalCount = 0;
-            let totalCars = 0;
-            let totalMotors = 0;
-
-            data.forEach(d => {
-                totalCount += d.count || 0;
-                totalCars += d.cars || 0;
-                totalMotors += d.motors || 0;
-            });
-
-            // Update Summary Text
-            const elTotal = document.getElementById('daily-total-count');
-            const elCars = document.getElementById('daily-total-cars');
-            const elMotors = document.getElementById('daily-total-motors');
-            const elDonutTotal = document.getElementById('donut-center-total');
-            
-            const carPctTotal = totalCount > 0 ? Math.round((totalCars / totalCount) * 100) + '%' : '0%';
-            const motorPctTotal = totalCount > 0 ? Math.round((totalMotors / totalCount) * 100) + '%' : '0%';
-
-            if (elTotal) elTotal.innerText = totalCount;
-            if (elCars) elCars.innerText = `${totalCars} (${carPctTotal})`;
-            if (elMotors) elMotors.innerText = `${totalMotors} (${motorPctTotal})`;
-            if (elDonutTotal) elDonutTotal.innerText = totalCount;
-
-            // Update Donut Chart
-            const donutCanvas = document.getElementById('dailyDonutChart');
-            if (donutCanvas) {
-                const donutCtx = donutCanvas.getContext('2d');
-                
-                if (dailyDonutChart) {
-                    dailyDonutChart.destroy();
-                }
-
-                dailyDonutChart = new Chart(donutCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Cars', 'Motorcycles'],
-                        datasets: [{
-                            data: [totalCars, totalMotors],
-                            backgroundColor: ['#4ade80', '#facc15'], // Green-400, Yellow-400
-                            borderWidth: 0,
-                            hoverOffset: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '70%',
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                         const val = context.raw;
-                                         const pct = totalCount > 0 ? Math.round((val / totalCount) * 100) + '%' : '0%';
-                                         return ` ${context.label}: ${val} (${pct})`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        }
-
-        function updateDailyModalTable(data) {
-            const tbody = document.getElementById('daily-modal-table-body');
-            tbody.innerHTML = '';
-            
-            if (data && data.length > 0) {
-                 // Show chronologically (00:00 -> 23:00)
-                 data.forEach(row => {
-                      const tr = document.createElement('tr');
-                      tr.className = "border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors";
-                      
-                      const carPct = getPercent(row.cars, row.count);
-                      const motorPct = getPercent(row.motors, row.count);
-
-                      tr.innerHTML = `
-                         <td class="px-4 py-3 font-medium text-white">${row.label}</td>
-                         <td class="px-4 py-3 text-blue-400 font-bold">${row.count}</td>
-                         <td class="px-4 py-3 text-green-400">${row.cars} <span class="text-xs text-slate-500 ml-1">(${carPct})</span></td>
-                         <td class="px-4 py-3 text-yellow-400">${row.motors} <span class="text-xs text-slate-500 ml-1">(${motorPct})</span></td>
-                      `;
-                      tbody.appendChild(tr);
-                 });
-            } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center">No data available</td></tr>';
-            }
-        }
-
-        async function fetchHistory() {
-             try {
-                let url = `/api/history?period=${chartPeriod}`;
-                if (activeSourceId) {
-                    url += `&camera_id=${activeSourceId}`;
-                }
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    const labels = data.map(d => d.label);
-                    const counts = data.map(d => d.count);
-                    
-                    activityChart.data.labels = labels;
-                    activityChart.data.datasets[0].data = counts;
-                    activityChart.update();
-                }
-                
-                // Update Detailed Breakdown Table
-                updateHistoryTable(data);
-                
-            } catch (e) { console.error(e); }
-        }
-
-        function updateHistoryTable(data) {
-             const tbody = document.getElementById('hourly-table-body');
-             const title = document.getElementById('breakdown-title');
-             
-             if (title && chartPeriod !== 'custom') {
-                 const periodLabels = {
-                     '30m': 'Last 30 Minutes',
-                     '1h': 'Last 1 Hour',
-                     '6h': 'Last 6 Hours',
-                     '12h': 'Last 12 Hours',
-                     '24h': 'Last 24 Hours',
-                     '7d': 'Last 7 Days',
-                     '30d': 'Last 30 Days'
-                 };
-                 title.innerText = `Detailed Breakdown (${periodLabels[chartPeriod] || chartPeriod})`;
-             }
-
-             if (tbody && data && data.length > 0) {
-                 tbody.innerHTML = '';
-                 
-                 // Show View Action only for 7d and 30d
-                 const showAction = (chartPeriod === '7d' || chartPeriod === '30d');
-                 
-                 // Sort logic: 
-                 // If 24h (Today) or Custom (Specific Day), show Chronological (Oldest -> Newest)
-                 // Otherwise (Last 30m, 1h, etc), show Reverse Chronological (Newest -> Oldest)
-                 let sortedData = [...data];
-                 if (chartPeriod !== '24h' && chartPeriod !== 'custom') {
-                     sortedData.reverse();
-                 }
-                 
-                 sortedData.forEach(row => {
-                      const tr = document.createElement('tr');
-                      tr.className = "border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors";
-                      
-                      const actionHtml = showAction 
-                        ? `<button onclick="viewDailyDetails(${row.ts}, '${row.label}')" class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded transition-colors shadow-sm">View</button>` 
-                        : '<span class="text-slate-600">-</span>';
-
-                      const carPct = getPercent(row.cars, row.count);
-                      const motorPct = getPercent(row.motors, row.count);
-
-                      tr.innerHTML = `
-                         <td class="px-4 py-3 font-medium text-white">${row.label}</td>
-                         <td class="px-4 py-3 text-blue-400 font-bold">${row.count}</td>
-                         <td class="px-4 py-3 text-green-400">${row.cars} <span class="text-xs text-slate-500 ml-1">(${carPct})</span></td>
-                         <td class="px-4 py-3 text-yellow-400">${row.motors} <span class="text-xs text-slate-500 ml-1">(${motorPct})</span></td>
-                         <td class="px-4 py-3 text-center">${actionHtml}</td>
-                      `;
-                      tbody.appendChild(tr);
-                 });
-             } else if (tbody) {
-                 tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center">No data available for this period</td></tr>';
-             }
-        }
-
-        // Fetch Data from Backend
-        async function fetchStats() {
-            try {
-                const response = await fetch('/api/stats');
-                const data = await response.json();
-
-                // Determine which stats to show (Active Camera vs Global)
-                let targetStats = null;
-                
-                if (activeSourceId && data.sources && data.sources[activeSourceId]) {
-                    // Use Active Camera Stats
-                    targetStats = data.sources[activeSourceId];
-                } else if (data.global_total) {
-                    // Fallback to Global Stats
-                    targetStats = data.global_total;
-                } else {
-                    // Legacy/Root Fallback
-                    targetStats = data;
-                }
-
-                // Extract values
-                let accCount = targetStats.accumulated_count || 0;
-                let accCars = targetStats.cars || (targetStats.accumulated_class_counts ? (targetStats.accumulated_class_counts[0] || 0) : 0);
-                let accMotors = targetStats.motorcycles || (targetStats.accumulated_class_counts ? (targetStats.accumulated_class_counts[1] || 0) : 0);
-                let curCars = targetStats.current_cars || (targetStats.current_class_counts ? (targetStats.current_class_counts[0] || 0) : 0);
-                let curMotors = targetStats.current_motorcycles || (targetStats.current_class_counts ? (targetStats.current_class_counts[1] || 0) : 0);
-                
-                document.getElementById('total-count').innerText = accCount;
-                document.getElementById('fps-counter').innerText = "LIVE";
-                
-                // Helper to update UI
-                const updateUI = (id, accVal, curVal) => {
-                    const totalAcc = accCount || 1;
-                    
-                    // Main Count (Accumulated)
-                    const elCount = document.getElementById(`count-${id}`);
-                    if(elCount) elCount.innerText = accVal;
-                    
-                    // Progress Bar (Based on accumulated share)
-                    const elBar = document.getElementById(`bar-${id}`);
-                    if(elBar) {
-                        const percent = (accVal / totalAcc) * 100;
-                        elBar.style.width = `${percent}%`;
-                    }
-
-                    // Detail Text (if any)
-                    const elAcc = document.getElementById(`acc-${id}`);
-                    if(elAcc) elAcc.innerText = accVal;
-                };
-
-                // 0 = Car, 1 = Motorcycle
-                updateUI('car', accCars, curCars);
-                updateUI('motorcycle', accMotors, curMotors);
-
-                // Update Time Window Stats Table
-                if (data.window_stats) {
-                    const tbody = document.getElementById('stats-table-body');
-                    if (tbody) {
-                        tbody.innerHTML = '';
-                        
-                        const periods = ['10s', '30m', '1h', '5h', '24h'];
-                        const labels = {
-                            '10s': 'Last 10 Seconds', 
-                            '30m': 'Last 30 Minutes', 
-                            '1h': 'Last 1 Hour', 
-                            '5h': 'Last 5 Hours', 
-                            '24h': 'Last 24 Hours'
-                        };
-                        
-                        periods.forEach(p => {
-                            const stat = data.window_stats[p];
-                            if (stat) {
-                                const row = document.createElement('tr');
-                                row.className = "border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors";
-                                
-                                const carPct = getPercent(stat.cars, stat.total_volume);
-                                const motorPct = getPercent(stat.motors, stat.total_volume);
-
-                                row.innerHTML = `
-                                    <td class="px-4 py-3 font-medium text-white">${labels[p]}</td>
-                                    <td class="px-4 py-3 text-blue-400 font-bold">${stat.total_volume}</td>
-                                    <td class="px-4 py-3 text-green-400">${stat.cars} <span class="text-xs text-slate-500 ml-1">(${carPct})</span></td>
-                                    <td class="px-4 py-3 text-yellow-400">${stat.motors} <span class="text-xs text-slate-500 ml-1">(${motorPct})</span></td>
-                                    <td class="px-4 py-3 text-right text-xs text-gray-500">${stat.avg_density} avg density</td>
-                                `;
-                                tbody.appendChild(row);
-                            }
-                        });
-                    }
-                }
-                
-                // Update Sidebar Badges
-                if (data.sources) {
-                    // Cache sources for export modal
-                    window.CCTV_SOURCES = Object.entries(data.sources).map(([id, stats]) => ({ id, name: stats.name }));
-                    Object.entries(data.sources).forEach(([id, stats]) => {
-                        const badge = document.getElementById(`badge-${id}`);
-                        if (badge) {
-                            badge.innerText = stats.accumulated_count;
-                            badge.classList.remove('hidden');
-                        }
-                    });
-                }
-
-            } catch (error) {
-                console.error('Error fetching stats:', error);
-            }
-        }
-
-        // Toggle Video Section
-        function toggleVideo() {
-            const videoSection = document.getElementById('video-section');
-            const videoIcon = document.getElementById('video-icon');
-            const videoText = document.getElementById('video-text');
-            const videoImg = document.getElementById('video-stream');
-            
-            if (videoSection.classList.contains('hidden')) {
-                // Show Video
-                videoSection.classList.remove('hidden');
-                videoIcon.classList.remove('fa-video-slash');
-                videoIcon.classList.add('fa-video');
-                videoText.innerText = "Hide Video Monitor";
-                
-                // Force reload video stream to ensure connection
-                // Add timestamp to prevent caching
-                videoImg.src = getVideoFeedUrl() + '?t=' + new Date().getTime();
-                
-            } else {
-                // Hide Video
-                videoSection.classList.add('hidden');
-                videoIcon.classList.remove('fa-video');
-                videoIcon.classList.add('fa-video-slash');
-                videoText.innerText = "Show Video Monitor";
-            }
-        }
-
-        async function updateStream() {
-            const urlInput = document.getElementById('stream-url');
-            const url = urlInput.value.trim();
-            if (!url) return alert("Please enter a URL");
-            
-            const btn = document.querySelector('button[onclick="updateStream()"]');
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            btn.disabled = true;
-
-            try {
-                const response = await fetch('/api/update_source', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url }),
-                });
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-                    btn.classList.add('bg-green-600', 'hover:bg-green-700');
-                    btn.innerHTML = '<i class="fas fa-check"></i>';
-                    
-                    // Force reload video stream
-                    const videoImg = document.getElementById('video-stream');
-                    const currentSrc = videoImg.src.split('?')[0];
-                    videoImg.src = currentSrc + '?t=' + new Date().getTime();
-
-                    setTimeout(() => {
-                        btn.innerHTML = originalHTML;
-                        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
-                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                        btn.disabled = false;
-                        urlInput.value = ''; 
-                    }, 2000);
-                    
-                } else {
-                    alert("Error: " + result.message);
-                    btn.innerHTML = originalHTML;
-                    btn.disabled = false;
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert("Failed to connect to server");
-                btn.innerHTML = originalHTML;
-                btn.disabled = false;
-            }
-        }
-
-        // Poll stats every 1 second
-        setInterval(fetchStats, 1000);
-        
-        // Poll history every 30 seconds
-        setInterval(fetchHistory, 30000);
-
-        // Initial Fetch
-        fetchHistory();
-
-        function resetData() {
-            // Open Modal
-            document.getElementById('reset-login-modal').classList.remove('hidden');
-            document.getElementById('reset-username').value = '';
-            document.getElementById('reset-password').value = '';
-            document.getElementById('reset-username').focus();
-        }
-
-        function openExportModal() {
-            const modal = document.getElementById('export-modal');
-            const sel = document.getElementById('export-camera');
-            // Populate camera list once
-            if (sel.options.length <= 1 && window.CCTV_SOURCES) {
-                Object.values(window.CCTV_SOURCES).forEach(src => {
-                    const opt = document.createElement('option');
-                    opt.value = src.id;
-                    opt.text = src.name || src.id;
-                    sel.appendChild(opt);
-                });
-            }
-            modal.classList.remove('hidden');
-        }
-
-        function closeExportModal() {
-            document.getElementById('export-modal').classList.add('hidden');
-        }
-
-        function submitExport() {
-            const cam = document.getElementById('export-camera').value;
-            const start = document.getElementById('export-start').value; // "YYYY-MM-DDTHH:MM"
-            const end = document.getElementById('export-end').value;
-            const qs = new URLSearchParams();
-            if (cam && cam !== 'all') qs.append('camera_id', cam);
-            if (start) qs.append('start', start.replace('T', ' '));
-            if (end) qs.append('end', end.replace('T', ' '));
-            const url = '/export/csv' + (qs.toString() ? ('?' + qs.toString()) : '');
-            window.open(url, '_blank');
-            closeExportModal();
-        }
-        function closeResetModal() {
-            document.getElementById('reset-login-modal').classList.add('hidden');
-        }
-
-        async function submitReset() {
-            const username = document.getElementById('reset-username').value;
-            const password = document.getElementById('reset-password').value;
-            
-            if (!username || !password) {
-                alert("Please enter username and password.");
-                return;
-            }
-
-            if (!confirm("Are you sure you want to ERASE ALL DATA? This cannot be undone.")) {
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/reset_data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    alert("All data erased successfully.");
-                    closeResetModal();
-                    resetStatsUI();
-                    // Clear sidebar badges immediately
-                    const badges = document.querySelectorAll('[id^="badge-"]');
-                    badges.forEach(b => {
-                        b.innerText = "0";
-                        b.classList.add('hidden');
-                    });
-                    // Refresh
-                    fetchStats();
-                } else {
-                    alert("Failed: " + result.message);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert("Failed to connect to server");
-            }
-        }
-
-    </script>
+    loadStats();
+})();
+</script>
 {% endblock %}

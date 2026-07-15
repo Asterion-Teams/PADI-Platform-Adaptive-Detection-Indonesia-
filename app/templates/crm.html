@@ -3,7 +3,7 @@
 {% block header_kicker %}Enforcement{% endblock %}
 {% block header_title %}Citizen Reports & CRM Integration{% endblock %}
 {% block header_actions %}
-    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
+    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-primary)] rounded-lg text-sm font-semibold transition-all border border-[var(--border-color)] hover:border-sky-500/40">
         <i class="fas fa-chart-line text-sky-300"></i>
         <span>Enforcement Dashboard</span>
     </a>
@@ -26,7 +26,7 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="glass-panel p-4">
             <div class="text-xs text-slate-400">Total Reports</div>
-            <div class="text-3xl font-bold text-white mt-1" id="crm-total">0</div>
+            <div class="text-3xl font-bold text-[var(--text-primary)] mt-1" id="crm-total">0</div>
         </div>
         <div class="glass-panel p-4">
             <div class="text-xs text-slate-400">Open</div>
@@ -46,12 +46,12 @@
         <!-- Social Media Mentions (@DishubDKI) -->
         <div class="glass-panel p-4 lg:col-span-3">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                     <i class="fas fa-at text-sky-400"></i> Social Media Mentions
                     <span class="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full">@DishubDKI</span>
                     <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">Live</span>
                 </h3>
-                <button id="btn-refresh-mentions" class="text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                <button id="btn-refresh-mentions" class="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex items-center gap-1">
                     <i class="fas fa-rotate"></i> Refresh
                 </button>
             </div>
@@ -63,7 +63,7 @@
 
         <!-- New Report Form -->
         <div class="glass-panel p-4 lg:col-span-1">
-            <h3 class="text-white font-semibold text-sm flex items-center gap-2 mb-3">
+            <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2 mb-3">
                 <i class="fas fa-pen-to-square text-sky-400"></i> Submit New Report
             </h3>
             <div class="space-y-3">
@@ -102,7 +102,7 @@
         <!-- Reports table -->
         <div class="glass-panel p-4 lg:col-span-2">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
+                <h3 class="text-[var(--text-primary)] font-semibold text-sm flex items-center gap-2">
                     <i class="fas fa-envelope-open-text text-emerald-400"></i> Recent Reports
                 </h3>
                 <select id="filter-status" class="input-surface text-slate-200 text-xs px-2 py-1.5 rounded-md">
@@ -137,6 +137,15 @@
 (function(){
     const STATUS_OPTIONS = ['open', 'investigating', 'resolved', 'closed'];
 
+    // Helper: fetch with CSRF token for POST/PATCH/DELETE
+    async function csrfFetch(url, options) {
+        options = options || {};
+        const csrfRes = await fetch('/api/csrf_token');
+        const csrfData = await csrfRes.json();
+        const headers = { ...(options.headers || {}), 'X-CSRF-Token': csrfData.csrf_token || '' };
+        return fetch(url, { ...options, headers });
+    }
+
     async function loadSummary(){
         const r = await fetch('/api/crm/summary');
         const d = await r.json();
@@ -170,7 +179,7 @@
             const prio = rep.priority || 'normal';
             const prioCls = prio === 'high' ? 'prio-high' : 'prio-normal';
             const stOptions = STATUS_OPTIONS.map(s => `<option value="${s}"${rep.status===s?' selected':''}>${s}</option>`).join('');
-            return `<tr class="border-t border-slate-800/60 hover:bg-slate-800/40">
+            return `<tr class="border-t border-[var(--border-color)] hover:bg-[var(--nav-link-hover-bg)]">
                 <td class="py-2 px-2 whitespace-nowrap">${ts}</td>
                 <td class="py-2 px-2">${rep.reporter_name || 'Anonymous'}</td>
                 <td class="py-2 px-2">${rep.category || '-'}</td>
@@ -205,7 +214,7 @@
         };
         const res = document.getElementById('f-result');
         if (!payload.description){ res.textContent = 'Description is required'; res.className='text-xs text-red-400'; return; }
-        const r = await fetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const r = await csrfFetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const d = await r.json();
         if (d.status === 'success'){
             res.innerHTML = `Report #${d.id} submitted. Auto-classified: <b>${prettyType(d.auto_classified_type)}</b> · Priority: <b>${d.priority}</b>`;
@@ -245,14 +254,14 @@
                 else if (m.platform === 'facebook') { platformIcon = 'fab fa-facebook'; platformColor = 'text-blue-400'; }
                 else if (m.platform === 'news') { platformIcon = 'fas fa-newspaper'; platformColor = 'text-amber-400'; }
                 else if (m.platform === 'twitter') { platformIcon = 'fab fa-x-twitter'; platformColor = 'text-slate-300'; }
-                return `<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-sky-500/30 transition-all">
+                return `<div class="p-3 rounded-lg bg-[var(--input-surface)] border border-[var(--border-color)] hover:border-sky-500/30 transition-all">
                     <div class="flex items-start gap-2">
-                        <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <div class="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
                             <i class="${platformIcon} ${platformColor} text-xs"></i>
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2 mb-1">
-                                <span class="text-white text-xs font-semibold">${m.source || 'Social Media'}</span>
+                                <span class="text-[var(--text-primary)] text-xs font-semibold">${m.source || 'Social Media'}</span>
                                 <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${m.platform || ''}</span>
                                 ${prioIcon}
                                 ${typeLabel}
@@ -283,7 +292,7 @@
             category: 'traffic',
             description: title,
         };
-        const r = await fetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const r = await csrfFetch('/api/crm/reports', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const d = await r.json();
         if (d.status === 'success'){
             btn.innerHTML = '<i class="fas fa-check mr-1"></i>Imported';

@@ -1,247 +1,926 @@
 {% extends "base.html" %}
-{% block title %}PADI - Command Center{% endblock %}
-{% block header_kicker %}Command Center{% endblock %}
-{% block header_title %}Traffic Enforcement Monitoring{% endblock %}
-{% block header_actions %}
-    <a href="/enforcement" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-red-500/40">
-        <i class="fas fa-shield-halved text-red-300"></i>
-        <span>Enforcement</span>
-    </a>
-    <a href="/zones" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-sky-500/40">
-        <i class="fas fa-draw-polygon text-sky-300"></i>
-        <span>Zones</span>
-    </a>
+
+{% block title %}Dashboard{% endblock %}
+
+{% block header_icon %}
+<div class="w-7 h-7 rounded-[0.4rem] flex items-center justify-center bg-blue-50 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+</div>
 {% endblock %}
-{% block head_extra %}
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-{% endblock %}
+
+{% block header_kicker %}Traffic Intelligence Platform{% endblock %}
+
+{% block header_title %}Dashboard Pelanggaran Lalu Lintas{% endblock %}
+
 {% block style_extra %}
 <style>
-    #map { height: 100%; min-height: 420px; border-radius: 12px; }
-    .leaflet-popup-content-wrapper { background: transparent !important; box-shadow: none !important; border-radius: 12px !important; padding: 0 !important; }
-    .leaflet-popup-content { margin: 0 !important; }
-    .leaflet-popup-tip { background: #0f172a !important; border: 1px solid rgba(255,255,255,0.1) !important; }
-    .leaflet-popup-close-button { color: #64748b !important; font-size: 18px !important; top: 8px !important; right: 10px !important; }
-    .leaflet-popup-close-button:hover { color: #fff !important; }
-    .cam-popup { min-width: 220px; }
-    .cam-popup h4 { font-weight: 700; margin-bottom: 4px; }
-    .cam-popup .status { font-size: 11px; }
-    .feed-thumb { width: 100%; border-radius: 8px; margin-top: 6px; border: 1px solid #334155; }
-    .sidebar-feed { border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); background: #0b1220; }
-    .zone-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 9999px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
-    .zb-no_parking { background: rgba(220,38,38,0.2); color: #fca5a5; border: 1px solid rgba(220,38,38,0.3); }
-    .zb-busway { background: rgba(249,115,22,0.2); color: #fdba74; border: 1px solid rgba(249,115,22,0.3); }
-    .zb-bicycle { background: rgba(6,182,212,0.2); color: #67e8f9; border: 1px solid rgba(6,182,212,0.3); }
-    .zb-bus_stop { background: rgba(16,185,129,0.2); color: #86efac; border: 1px solid rgba(16,185,129,0.3); }
-    @media (max-width: 1023px) {
-        #map { min-height: 360px; }
+    .kpi-card {
+        position: relative;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 1.25rem;
+        padding: 1.5rem;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
     }
-    @media (max-width: 767px) {
-        #map { min-height: 320px; }
+    .dark .kpi-card { background: rgba(15,23,42,0.8); border-color: rgba(255,255,255,0.06); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.025);
+        border-color: rgba(0, 0, 0, 0.08);
     }
+    .dark .kpi-card:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+    .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1.1; color: #0f172a; }
+    .dark .kpi-value { color: #f1f5f9; }
+    .kpi-label { font-size: 0.825rem; color: #475569; font-weight: 600; }
+    .dark .kpi-label { color: #cbd5e1; }
+    .kpi-sub-text { font-size: 0.75rem; color: #64748b; }
+    .dark .kpi-sub-text { color: #94a3b8; }
+
+    .delta-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; line-height: 1; }
+    .delta-badge.delta-up { background: #fee2e2; color: #ef4444; border: 1px solid #fca5a5; }
+    .delta-badge.delta-down { background: #d1fae5; color: #10b981; border: 1px solid #6ee7b7; }
+    .delta-badge.delta-neutral { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+    .delta-badge.delta-live { background: #fef3c7; color: #f59e0b; border: 1px solid #fcd34d; }
+    .dark .delta-badge.delta-up { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
+    .dark .delta-badge.delta-down { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
+    .dark .delta-badge.delta-neutral { background: rgba(100,116,139,0.15); color: #94a3b8; border-color: rgba(100,116,139,0.3); }
+    .dark .delta-badge.delta-live { background: rgba(245,158,11,0.15); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
+
+    .flat-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 1rem; transition: transform 0.2s ease; }
+    .kpi-card:hover .flat-icon { transform: scale(1.05) rotate(3deg); }
+    .flat-icon svg { width: 24px; height: 24px; }
+    .flat-red { background: #fee2e2; color: #ef4444; }
+    .flat-sky { background: #e0f2fe; color: #0ea5e9; }
+    .flat-emerald { background: #d1fae5; color: #10b981; }
+    .flat-amber { background: #fef3c7; color: #f59e0b; }
+    .dark .flat-red { background: rgba(239,68,68,0.15); color: #f87171; }
+    .dark .flat-sky { background: rgba(14,165,233,0.15); color: #38bdf8; }
+    .dark .flat-emerald { background: rgba(16,185,129,0.15); color: #34d399; }
+    .dark .flat-amber { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+    .section-card { background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.05); border-radius: 1.25rem; overflow: hidden; transition: all 0.3s ease; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02); }
+    .dark .section-card { background: rgba(15,23,42,0.6); border-color: rgba(255,255,255,0.06); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
+    .section-card-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(0, 0, 0, 0.04); }
+    .dark .section-card-header { border-bottom-color: rgba(255,255,255,0.05); }
+    .section-card-title { font-size: 1rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.5rem; }
+    .dark .section-card-title { color: #f8fafc; }
+    .section-card-body { padding: 1.5rem; }
+
+    .period-btn { color: #64748b; background: transparent; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s ease; border-radius: 0.5rem; padding: 0.4rem 1rem; font-weight: 600; font-size: 0.75rem; }
+    .dark .period-btn { color: #94a3b8; border-color: rgba(255,255,255,0.1); }
+    .period-btn:hover { background: #f8fafc; color: #0f172a; }
+    .dark .period-btn:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
+    .period-btn.period-active { color: #ffffff; background: #0f172a; border-color: #0f172a; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .dark .period-btn.period-active { color: #0f172a; background: #ffffff; border-color: #ffffff; }
+
+    .tab-group { display: inline-flex; background: #f1f5f9; border-radius: 9999px; padding: 0.25rem; gap: 0.25rem; }
+    .dark .tab-group { background: rgba(255,255,255,0.05); }
+    .tab-btn { padding: 0.4rem 1rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; color: #64748b; background: transparent; border: none; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.35rem; }
+    .tab-btn:hover { color: #0f172a; background: rgba(255,255,255,0.5); }
+    .dark .tab-btn:hover { color: #f1f5f9; background: rgba(255,255,255,0.05); }
+    .tab-btn.active { background: #38bdf8; color: #ffffff; box-shadow: 0 2px 5px rgba(56,189,248,0.3); }
+    .tab-btn .tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; background: rgba(255,255,255,0.2); }
+    .tab-btn.active .tab-count { background: rgba(255,255,255,0.25); color: white; }
+    .tab-btn:not(.active) .tab-count { background: #e2e8f0; color: #475569; }
+    .dark .tab-btn:not(.active) .tab-count { background: rgba(255,255,255,0.1); color: #94a3b8; }
+
+    .cam-thumb { position: relative; border-radius: 0.75rem; overflow: hidden; background: #f8fafc; border: 1px solid rgba(0,0,0,0.05); aspect-ratio: 16/9; transition: all 0.3s ease; }
+    .dark .cam-thumb { background: rgba(15,23,42,0.5); border-color: rgba(255,255,255,0.05); }
+    .cam-thumb:hover { border-color: #38bdf8; transform: scale(1.03); box-shadow: 0 4px 12px rgba(56,189,248,0.15); z-index: 10; }
+    .cam-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .cam-thumb .cam-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 0.5rem 0.75rem; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); display: flex; align-items: center; justify-content: space-between; }
+    .cam-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.3); animation: pulse-green 2s infinite; }
+    @keyframes pulse-green { 0%,100% { box-shadow: 0 0 0 2px rgba(16,185,129,0.3); } 50% { box-shadow: 0 0 0 4px rgba(16,185,129,0.15); } }
+    .cam-label { font-size: 0.7rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+
+    .live-feed-container { max-height: 320px; overflow-y: auto; scroll-behavior: smooth; }
+    .live-feed-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid #f1f5f9; }
+    .dark .live-feed-item { border-bottom-color: rgba(255,255,255,0.05); }
+    .live-feed-item:last-child { border-bottom: none; }
+    .live-feed-badge { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.5); animation: blink-dot 1s infinite; }
+    @keyframes blink-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .live-feed-text { font-size: 0.8rem; font-weight: 500; color: #334155; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dark .live-feed-text { color: #cbd5e1; }
+    .live-feed-time { font-size: 0.7rem; color: #94a3b8; flex-shrink: 0; }
+
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .data-table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; border-bottom: 1px solid rgba(0,0,0,0.05); background: #f8fafc; }
+    .dark .data-table th { color: #94a3b8; border-bottom-color: rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
+    .data-table td { padding: 0.875rem 1rem; color: #0f172a; border-bottom: 1px solid rgba(0,0,0,0.03); }
+    .dark .data-table td { color: #f1f5f9; border-bottom-color: rgba(255,255,255,0.03); }
+    
+    .insight-card { display: flex; align-items: flex-start; gap: 0.875rem; padding: 1rem; border-radius: 1rem; background: #f8fafc; border: 1px solid rgba(0,0,0,0.03); transition: all 0.2s ease; }
+    .dark .insight-card { background: rgba(15,23,42,0.4); border-color: rgba(255,255,255,0.03); }
+    .insight-card:hover { border-color: #38bdf8; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(56,189,248,0.1); }
+    .insight-icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+    .insight-card p { font-size: 0.8rem; line-height: 1.6; color: #475569; margin: 0; }
+    .dark .insight-card p { color: #cbd5e1; }
+    
+    .quick-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; padding: 1.25rem 1rem; border-radius: 1rem; background: #ffffff; border: 1px solid rgba(0,0,0,0.05); cursor: pointer; transition: all 0.2s ease; text-decoration: none; }
+    .dark .quick-btn { background: rgba(15,23,42,0.6); border-color: rgba(255,255,255,0.05); }
+    .quick-btn:hover { border-color: #38bdf8; background: #f0f9ff; transform: translateY(-3px); box-shadow: 0 6px 15px rgba(56,189,248,0.15); }
+    .dark .quick-btn:hover { background: rgba(56,189,248,0.08); }
+    .quick-btn span { font-size: 0.8rem; font-weight: 600; color: #475569; text-align: center; }
+    .dark .quick-btn span { color: #cbd5e1; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.5); }
+
+    #map { height: 260px; border-radius: 0.75rem; overflow: hidden; }
+    .chart-container { position: relative; width: 100%; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5rem; color: #94a3b8; }
+    .empty-state svg { width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.3; }
+    .empty-state p { font-size: 0.875rem; font-weight: 500; margin: 0; }
+
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4">
-    <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
 
-        <!-- Map (main area) -->
-        <div class="xl:col-span-3 glass-panel p-2 flex flex-col min-h-[360px] md:min-h-[520px]">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2">
-                <h3 class="text-white font-semibold text-sm flex items-center gap-2">
-                    <i class="fas fa-map-location-dot text-sky-400"></i> Peta CCTV & Zona Enforcement
-                </h3>
-                <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 mr-1"></span>Online</span>
-                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 mr-1"></span>Zona Aktif</span>
-                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400 mr-1"></span>Pelanggaran</span>
-                </div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="kpi-card">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <div class="kpi-label mb-1.5">Total Pelanggaran</div>
+                <div class="kpi-value mb-1" id="kpi-total-v">0</div>
+                <div id="kpi-delta-v" class="delta-badge delta-neutral"></div>
+                <div class="kpi-sub-text mt-2">All time</div>
             </div>
-            <div class="flex-1 rounded-xl overflow-hidden min-h-[320px] md:min-h-[500px]" id="map"></div>
+            <div class="flat-icon flat-red">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
         </div>
+    </div>
+    <div class="kpi-card">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <div class="kpi-label mb-1.5">Kamera Aktif</div>
+                <div class="kpi-value mb-1" id="kpi-active-c">0</div>
+                <div id="kpi-delta-c" class="delta-badge delta-live"></div>
+                <div class="kpi-sub-text mt-2"><span id="kpi-total-c">0</span> total cameras</div>
+            </div>
+            <div class="flat-icon flat-emerald">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            </div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <div class="kpi-label mb-1.5">Deteksi AI</div>
+                <div class="kpi-value mb-1" id="kpi-det-today">0</div>
+                <div id="kpi-delta-d" class="delta-badge delta-neutral"></div>
+                <div class="kpi-sub-text mt-2">Today</div>
+            </div>
+            <div class="flat-icon flat-sky">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="flex items-start justify-between">
+            <div class="flex-1">
+                <div class="kpi-label mb-1.5">Menunggu Tinjauan</div>
+                <div class="kpi-value mb-1" id="kpi-pending-v">0</div>
+                <div id="kpi-delta-p" class="delta-badge delta-neutral"></div>
+                <div class="kpi-sub-text mt-2">Requires action</div>
+            </div>
+            <div class="flat-icon flat-amber">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+        </div>
+    </div>
+</div>
 
-        <!-- Right sidebar: camera list + live feed -->
-        <div class="flex flex-col gap-4 xl:overflow-y-auto xl:max-h-[calc(100vh-8rem)] min-w-0">
-            <!-- Live feed -->
-            <div class="glass-panel p-3">
-                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
-                    <i class="fas fa-video text-red-400"></i> Live Feed
-                    <span class="inline-flex h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                </h4>
-                <div class="sidebar-feed">
-                    <img id="live-img" src="" class="w-full" style="display:none; min-height:140px; object-fit:cover;" />
-                    <div id="live-ph" class="flex items-center justify-center h-[140px] text-slate-600 text-xs">
-                        Klik kamera di peta
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
+    <div class="lg:col-span-8 flex flex-col gap-4">
+        <div class="section-card">
+            <div class="section-card-header flex-wrap">
+                <div class="flex items-center gap-3">
+                    <h3 class="section-card-title flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+                        Tren Pelanggaran & Kendaraan
+                    </h3>
+                    <div class="hidden sm:flex items-center gap-3 ml-2">
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-sky-500"></span><span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Pelanggaran</span></div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-amber-400"></span><span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Kendaraan</span></div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-emerald-500"></span><span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Mobil</span></div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-violet-400"></span><span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Motor</span></div>
                     </div>
                 </div>
-                <div class="text-[10px] text-slate-500 mt-1.5" id="live-label">—</div>
+                <div id="trend-period-label" class="ml-auto text-[11px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">—</div>
             </div>
-
-            <!-- Camera list -->
-            <div class="glass-panel p-3 flex-1">
-                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
-                    <i class="fas fa-list text-sky-400"></i> Daftar CCTV
-                </h4>
-                <div id="cam-list" class="space-y-2"></div>
+            <div class="section-card-body">
+                <!-- Inline period selector -->
+                <div class="flex items-center gap-2 mb-4" id="period-buttons">
+                    <button id="period-24h" class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">24 Jam</button>
+                    <button id="period-7d" class="period-btn px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">7 Hari</button>
+                    <button id="period-30d" class="period-btn period-active px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">30 Hari</button>
+                </div>
+                <div class="chart-container" style="height: 250px;"><canvas id="trendChart"></canvas></div>
             </div>
-
-            <!-- Recent violations -->
-            <div class="glass-panel p-3">
-                <h4 class="text-white text-xs font-semibold mb-2 flex items-center gap-2">
-                    <i class="fas fa-bell text-amber-400"></i> Pelanggaran Terbaru
-                </h4>
-                <div id="recent-violations" class="space-y-1.5 max-h-[200px] overflow-y-auto text-xs">
-                    <div class="text-slate-600 text-center py-3">Belum ada pelanggaran</div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="section-card">
+                <div class="section-card-header">
+                    <h3 class="section-card-title flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        Live Feed Kamera
+                    </h3>
+                    <span id="cam-count-badge" class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">0 aktif</span>
+                </div>
+                <div class="section-card-body">
+                    <div id="camera-grid" class="grid grid-cols-3 gap-2">
+                        <div class="col-span-3 empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <p>Loading cameras...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="section-card">
+                <div class="section-card-header">
+                    <h3 class="section-card-title flex items-center gap-2">
+                        <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                        Peta Lokasi Kamera
+                    </h3>
+                </div>
+                <div class="section-card-body p-2">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="lg:col-span-4 flex flex-col gap-4">
+        <div class="section-card">
+            <div class="section-card-header">
+                <h3 class="section-card-title flex items-center gap-2">
+                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                    Distribusi Pelanggaran
+                </h3>
+            </div>
+            <div class="section-card-body">
+                <div class="chart-container" style="height: 200px;"><canvas id="donutChart"></canvas></div>
+                <div id="donut-legend" class="mt-3 grid grid-cols-2 gap-1.5"></div>
+            </div>
+        </div>
+        <div class="section-card flex-1">
+            <div class="section-card-header">
+                <h3 class="section-card-title flex items-center gap-2">
+                    <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Live AI Feed
+                </h3>
+                <span class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">Real-time</span>
+                </span>
+            </div>
+            <div class="section-card-body live-feed-container" id="live-feed">
+                <div class="empty-state">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    <p>Waiting for detections...</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<div class="section-card mb-6">
+    <div class="section-card-header flex-wrap gap-3">
+        <h3 class="section-card-title flex items-center gap-2">
+            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414"/></svg>
+            Recent Violations
+        </h3>
+        <div class="tab-group" id="violation-tab-group">
+            <button class="tab-btn active" data-filter="all" data-status="">
+                Semua <span class="tab-count" id="count-all">0</span>
+            </button>
+            <button class="tab-btn" data-filter="pending" data-status="pending">
+                Tertunda <span class="tab-count" id="count-pending">0</span>
+            </button>
+            <button class="tab-btn" data-filter="confirmed" data-status="confirmed">
+                Dikonfirmasi <span class="tab-count" id="count-confirmed">0</span>
+            </button>
+            <button class="tab-btn" data-filter="rejected" data-status="rejected">
+                Ditolak <span class="tab-count" id="count-rejected">0</span>
+            </button>
+        </div>
+    </div>
+    <div class="section-card-body overflow-x-auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Waktu</th>
+                    <th>Kamera</th>
+                    <th>Tipe</th>
+                    <th>Plat Nomor</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="violations-table-body">
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414"/></svg>
+                            <p>Loading violations...</p>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <div class="lg:col-span-8">
+        <div class="section-card">
+            <div class="section-card-header">
+                <h3 class="section-card-title flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                    AI Insights
+                </h3>
+            </div>
+            <div class="section-card-body">
+                <div id="insights-container" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="insight-card">
+                        <div class="insight-icon bg-blue-100 dark:bg-blue-900/30">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        </div>
+                        <p id="insight-0"><strong>Analyzing...</strong> Loading traffic insights.</p>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-icon bg-emerald-100 dark:bg-emerald-900/30">
+                            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <p id="insight-1"><strong>Analyzing...</strong> Loading traffic insights.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="lg:col-span-4">
+        <div class="section-card">
+            <div class="section-card-header">
+                <h3 class="section-card-title flex items-center gap-2">
+                    <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Quick Actions
+                </h3>
+            </div>
+            <div class="section-card-body">
+                <div class="grid grid-cols-3 gap-2">
+                    <a href="/enforcement" class="quick-btn">
+                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <span>Search</span>
+                    </a>
+                    <a href="/executive_summary" class="quick-btn">
+                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414"/></svg>
+                        <span>Report</span>
+                    </a>
+                    <a href="/enforcement" class="quick-btn">
+                        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <span>Evidence</span>
+                    </a>
+                    <a href="/cameras" class="quick-btn">
+                        <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        <span>Cameras</span>
+                    </a>
+                    <a href="/zones" class="quick-btn">
+                        <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                        <span>Zones</span>
+                    </a>
+                    <a href="/analysis" class="quick-btn">
+                        <svg class="w-5 h-5 text-pink-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                        <span>Analysis</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 (function(){
-    let map, cameras = [], markers = {}, zones = [];
+    var typeLabels = {illegal_parking:'Parkir Liar', busway_occupancy:'Busway', bicycle_lane_occupancy:'Jalur Sepeda', wrong_way:'Lawan Arah', illegal_pickup_dropoff:'Ngetem'};
+    var typeColors = {illegal_parking:'#ef4444', busway_occupancy:'#f59e0b', bicycle_lane_occupancy:'#06b6d4', wrong_way:'#ec4899', illegal_pickup_dropoff:'#8b5cf6'};
 
-    // Init map centered on Bogor
-    map = L.map('map', { zoomControl: true }).setView([-6.601, 106.800], 15);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '© OpenStreetMap © CARTO'
-    }).addTo(map);
+    var chartTrend = null;
+    var chartDonut = null;
+    var cachedSources = null;
+    var cachedStats = null;
+    var currentFilter = '';
+    var cachedViolations = [];
 
-    async function loadData(){
-        // Load cameras
-        const r1 = await fetch('/api/sources');
-        cameras = await r1.json();
-
-        // Load zones
-        const r2 = await fetch('/api/zones');
-        const zd = await r2.json();
-        zones = (zd.zones || []).filter(z => z.active);
-
-        // Load recent violations
-        const r3 = await fetch('/api/violations?limit=10');
-        const vd = await r3.json();
-
-        renderMap();
-        renderCamList();
-        renderViolations(vd.violations || []);
+    function isDark(){
+        return document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
     }
 
-    function renderMap(){
-        // Clear existing
-        Object.values(markers).forEach(m => map.removeLayer(m));
-        markers = {};
-
-        cameras.forEach(cam => {
-            const lat = parseFloat(cam.lat);
-            const lng = parseFloat(cam.lng);
-            if (!lat || !lng) return;
-
-            const camZones = zones.filter(z => z.camera_id === cam.id);
-            const hasZones = camZones.length > 0;
-
-            // Camera marker
-            const icon = L.divIcon({
-                className: '',
-                html: `<div style="width:32px;height:32px;border-radius:50%;background:${hasZones ? 'rgba(16,185,129,0.9)' : 'rgba(100,116,139,0.8)'};border:2px solid ${hasZones ? '#10b981' : '#64748b'};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
-                    <i class="fas fa-video" style="color:white;font-size:12px;"></i>
-                </div>`,
-                iconSize: [32, 32],
-                iconAnchor: [16, 16],
-            });
-
-            const zoneBadges = camZones.map(z => `<span class="zone-badge zb-${z.zone_type}">${z.zone_type.replace('_',' ')}</span>`).join(' ');
-
-            const popup = `<div class="cam-popup" style="background:#0f172a;border-radius:12px;padding:16px;min-width:260px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 20px 40px rgba(0,0,0,0.5);">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                    <div style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;"></div>
-                    <h4 style="color:#f1f5f9;font-size:13px;font-weight:700;margin:0;">${cam.name}</h4>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;color:#94a3b8;">
-                    <span style="background:rgba(16,185,129,0.15);color:#6ee7b7;padding:2px 8px;border-radius:20px;font-weight:600;">Online</span>
-                    <span>·</span>
-                    <span>${camZones.length} zona aktif</span>
-                </div>
-                ${zoneBadges ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">' + zoneBadges + '</div>' : ''}
-                <button onclick="window._selectCam('${cam.id}')" style="width:100%;padding:8px 14px;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-                    <i class="fas fa-eye"></i> Lihat Live Feed
-                </button>
-            </div>`;
-
-            const marker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
-            markers[cam.id] = marker;
-        });
-
-        // Fit bounds
-        const pts = cameras.filter(c => c.lat && c.lng).map(c => [parseFloat(c.lat), parseFloat(c.lng)]);
-        if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.3));
+    function getGridColor(){
+        return isDark() ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
     }
 
-    function renderCamList(){
-        const el = document.getElementById('cam-list');
-        el.innerHTML = cameras.map(cam => {
-            const camZones = zones.filter(z => z.camera_id === cam.id);
-            return `<div class="p-2 rounded-lg border border-slate-800 hover:border-sky-500/30 cursor-pointer transition-all" onclick="window._selectCam('${cam.id}')">
-                <div class="flex items-center gap-2">
-                    <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
-                    <span class="text-xs text-white font-medium truncate">${cam.name}</span>
-                </div>
-                <div class="text-[10px] text-slate-500 mt-1 pl-4">
-                    ${camZones.length} zona · ${cam.active ? 'Aktif' : 'Nonaktif'}
-                </div>
-            </div>`;
-        }).join('');
+    function getTickColor(){
+        return isDark() ? '#94a3b8' : '#475569';
     }
 
-    function renderViolations(violations){
-        const el = document.getElementById('recent-violations');
-        if (!violations.length){
-            el.innerHTML = '<div class="text-slate-600 text-center py-3">Belum ada pelanggaran tercatat</div>';
+    function getTextColor(){
+        return isDark() ? '#f1f5f9' : '#0f172a';
+    }
+
+    function getSecondaryTextColor(){
+        return isDark() ? '#94a3b8' : '#64748b';
+    }
+
+    function formatDeltaBadge(elId, value, label){
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var absVal = Math.abs(value);
+        var arrow = value > 0 ? '&#9650;' : value < 0 ? '&#9660;' : '&#8212;';
+        var cls = value > 0 ? 'delta-up' : value < 0 ? 'delta-down' : 'delta-neutral';
+        el.className = 'delta-badge ' + cls;
+        el.innerHTML = '<span>' + arrow + ' ' + absVal + '%</span> ' + (label || '');
+    }
+
+    function updateClock(){
+        var el = document.getElementById('clock');
+        if (el) {
+            var now = new Date();
+            el.textContent = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        }
+    }
+
+    function renderCameraGrid(cams){
+        var grid = document.getElementById('camera-grid');
+        if (!grid) return;
+        if (!cams || !cams.length) {
+            grid.innerHTML = '<div class="col-span-3 empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg><p>No cameras found</p></div>';
             return;
         }
-        const typeColors = { illegal_parking:'text-red-300', busway_occupancy:'text-orange-300', bicycle_lane_occupancy:'text-cyan-300' };
-        const typeLabels = { illegal_parking:'Parkir Liar', busway_occupancy:'Jalur Busway', bicycle_lane_occupancy:'Jalur Sepeda', illegal_pickup_dropoff:'Ngetem' };
-        el.innerHTML = violations.slice(0, 8).map(v => {
-            const dt = new Date((v.timestamp||0)*1000);
-            const time = dt.toLocaleTimeString('id-ID', { timeZone:'Asia/Jakarta', hour:'2-digit', minute:'2-digit' });
-            return `<div class="flex items-center gap-2 p-1.5 rounded-md hover:bg-slate-800/40">
-                <span class="text-slate-500">${time}</span>
-                <span class="${typeColors[v.violation_type]||'text-slate-300'} font-medium">${typeLabels[v.violation_type]||v.violation_type}</span>
-                <span class="ml-auto font-mono text-slate-400">${v.plate_text||'—'}</span>
-            </div>`;
+        var badge = document.getElementById('cam-count-badge');
+        var onlineCount = cams.filter(function(c){ return c.status === 'online' || c.status === 'simulated'; }).length;
+        if (badge) badge.textContent = onlineCount + ' aktif';
+
+        grid.className = 'grid grid-cols-3 gap-2';
+        var ts = Date.now();
+        grid.innerHTML = cams.slice(0, 6).map(function(c){
+            var snapshotUrl = '/api/snapshot/' + c.id + '?t=' + ts;
+            var isOnline = c.status === 'online' || c.status === 'simulated';
+            return '<div class="cam-thumb cursor-pointer" onclick="window.location=\'/enforcement\'" data-cam-id="' + c.id + '">' +
+                '<img src="' + snapshotUrl + '" loading="lazy" onerror="this.style.display=\'none\'">' +
+                '<div class="cam-overlay">' +
+                '<span class="cam-status-dot"></span>' +
+                '<span class="cam-label">' + (c.name || c.id) + '</span>' +
+                '</div></div>';
+        }).join('');
+
+        if (window._camSnapshotTimer) clearInterval(window._camSnapshotTimer);
+        window._camSnapshotTimer = setInterval(function(){
+            var ts2 = Date.now();
+            grid.querySelectorAll('.cam-thumb img').forEach(function(img){
+                var camId = img.closest('.cam-thumb') && img.closest('.cam-thumb').dataset.camId;
+                if (camId) img.src = '/api/snapshot/' + camId + '?t=' + ts2;
+            });
+        }, 3000);
+    }
+
+    function renderDonut(byType){
+        var canvas = document.getElementById('donutChart');
+        var legendEl = document.getElementById('donut-legend');
+        if (!canvas) return;
+        var labels = [];
+        var data = [];
+        var colors = [];
+        var entries = Object.entries(byType || {}).sort(function(a,b){ return b[1]-a[1]; });
+        entries.forEach(function(item){
+            labels.push(typeLabels[item[0]] || item[0]);
+            data.push(item[1]);
+            colors.push(typeColors[item[0]] || '#64748b');
+        });
+        if (!data.length) {
+            if (legendEl) legendEl.innerHTML = '<p class="col-span-2 text-xs text-center text-slate-400">No data</p>';
+            return;
+        }
+        if (chartDonut) { chartDonut.destroy(); chartDonut = null; }
+        chartDonut = new Chart(canvas, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, cutout: '65%' }
+        });
+        if (legendEl) {
+            var total = data.reduce(function(a,b){ return a+b; }, 0);
+            legendEl.innerHTML = labels.map(function(l, i){
+                var pct = total > 0 ? Math.round(data[i]/total*100) : 0;
+                return '<div class="flex items-center gap-2 text-xs">' +
+                    '<span class="w-2 h-2 rounded-full flex-shrink-0" style="background:' + colors[i] + '"></span>' +
+                    '<span class="flex-1 truncate" style="color:var(--text-secondary,#64748b)">' + l + '</span>' +
+                    '<span class="font-bold" style="color:var(--text-primary,#0f172a)">' + data[i].toLocaleString() + '</span></div>';
+            }).join('');
+        }
+    }
+
+    var activePeriod = '30d';
+
+    // Expose to global so onclick="setPeriod(...)" works
+    window.setPeriod = function(period){
+        activePeriod = period;
+        ['24h','7d','30d'].forEach(function(p){
+            var btn = document.getElementById('period-' + p);
+            if (btn) btn.classList.toggle('period-active', p === period);
+        });
+        loadTrendData(period);
+    };
+
+    function loadTrendData(period){
+        fetch('/api/history?period=' + period)
+            .then(function(r){ return r.json(); })
+            .then(function(data){ renderTrendChart(data, period); })
+            .catch(function(e){ console.error('Trend load error:', e); });
+    }
+
+    // Period button click handlers
+    document.getElementById('period-buttons').addEventListener('click', function(e){
+        var btn = e.target.closest('.period-btn');
+        if (!btn) return;
+        var period = btn.id.replace('period-', '');
+        activePeriod = period;
+        ['24h','7d','30d'].forEach(function(p){
+            var b = document.getElementById('period-' + p);
+            if (b) b.classList.toggle('period-active', p === period);
+        });
+        loadTrendData(period);
+    });
+
+    function renderTrendChart(historyData, period){
+        var canvas = document.getElementById('trendChart');
+        if (!canvas) return;
+        if (chartTrend) { chartTrend.destroy(); chartTrend = null; }
+
+        var buckets = historyData || [];
+        var labels = buckets.map(function(d){ return d.label || ''; });
+        var violData = buckets.map(function(d){ return d.violations || 0; });
+        var carData = buckets.map(function(d){ return d.cars || 0; });
+        var motorData = buckets.map(function(d){ return d.motors || 0; });
+
+        // Date range label
+        var periodLabel = '';
+        if (labels.length > 1) {
+            periodLabel = labels[0] + ' — ' + labels[labels.length - 1];
+        } else if (labels.length === 1) {
+            periodLabel = labels[0];
+        }
+        var labelEl = document.getElementById('trend-period-label');
+        if (labelEl) labelEl.textContent = periodLabel;
+
+        var is24h = period === '24h';
+
+        chartTrend = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    // Pelanggaran (line)
+                    {
+                        label: 'Pelanggaran',
+                        data: violData,
+                        borderColor: '#0ea5e9', // sky-500
+                        backgroundColor: 'rgba(14,165,233,0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#0ea5e9',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 6,
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    },
+                    // Mobil (line)
+                    {
+                        label: 'Mobil',
+                        data: carData,
+                        type: 'line',
+                        backgroundColor: 'transparent',
+                        borderColor: '#10b981', // emerald-500
+                        borderWidth: 1.5,
+                        tension: 0.4,
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#fff',
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        yAxisID: 'y1',
+                        order: 2
+                    },
+                    // Motor (line)
+                    {
+                        label: 'Motor',
+                        data: motorData,
+                        type: 'line',
+                        backgroundColor: 'transparent',
+                        borderColor: '#a855f7', // purple-500
+                        borderWidth: 1.5,
+                        tension: 0.4,
+                        pointBackgroundColor: '#a855f7',
+                        pointBorderColor: '#fff',
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        yAxisID: 'y1',
+                        order: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#f1f5f9',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        boxPadding: 4,
+                        usePointStyle: true,
+                        callbacks: {
+                            title: function(items){
+                                return items[0].label;
+                            },
+                            label: function(ctx){
+                                return ctx.dataset.label + ': ' + (ctx.raw || 0).toLocaleString('id-ID');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: { color: getGridColor() },
+                        ticks: {
+                            color: getTickColor(),
+                            font: { size: 9 },
+                            maxTicksLimit: is24h ? 12 : 8,
+                            maxRotation: 0
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        suggestedMax: 5,
+                        grid: { color: getGridColor() },
+                        ticks: { color: '#0ea5e9', font: { size: 9 }, callback: function(v){ return v.toLocaleString(); } },
+                        title: { display: true, text: 'Pelanggaran', color: '#0ea5e9', font: { size: 9 } }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        suggestedMax: 10,
+                        grid: { drawOnChartArea: false, color: getGridColor() },
+                        ticks: { color: '#94a3b8', font: { size: 9 }, callback: function(v){ return v.toLocaleString(); } },
+                        title: { display: true, text: 'Kendaraan', color: '#94a3b8', font: { size: 9 } }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderViolationsTable(violations, filter){
+        var tbody = document.getElementById('violations-table-body');
+        if (!tbody) return;
+        var filtered = filter ? violations.filter(function(v){ return v.status === filter; }) : violations;
+        var countAll = violations.length;
+        var countPending = violations.filter(function(v){ return v.status === 'pending'; }).length;
+        var countConfirmed = violations.filter(function(v){ return v.status === 'confirmed'; }).length;
+        var countRejected = violations.filter(function(v){ return v.status === 'rejected'; }).length;
+
+        document.getElementById('count-all').textContent = countAll;
+        document.getElementById('count-pending').textContent = countPending;
+        document.getElementById('count-confirmed').textContent = countConfirmed;
+        document.getElementById('count-rejected').textContent = countRejected;
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414"/></svg><p>No violations found</p></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.slice(0, 20).map(function(v){
+            var time = v.timestamp ? new Date(v.timestamp * 1000).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+            var type = typeLabels[v.violation_type] || v.violation_type || '—';
+            var plate = v.plate_text || '—';
+            var cam = v.camera_name || '—';
+            var conf = v.confidence ? Math.round(v.confidence * 100) + '%' : '—';
+
+            var statusBadge = '';
+            var statusCls = v.status || 'pending';
+            if (statusCls === 'confirmed') {
+                statusBadge = '<span class="badge badge-green"><span class="status-dot" style="background:#10b981"></span>Confirmed</span>';
+            } else if (statusCls === 'rejected') {
+                statusBadge = '<span class="badge badge-gray"><span class="status-dot" style="background:#64748b"></span>Rejected</span>';
+            } else {
+                statusBadge = '<span class="badge badge-yellow"><span class="status-dot" style="background:#f59e0b"></span>Pending</span>';
+            }
+
+            return '<tr class="violation-row">' +
+                '<td style="color:var(--text-secondary,#64748b);font-size:0.72rem;white-space:nowrap">' + time + '</td>' +
+                '<td style="font-size:0.78rem">' + cam + '</td>' +
+                '<td><span class="badge badge-red">' + type + '</span></td>' +
+                '<td><span class="font-mono font-bold" style="font-size:0.78rem;letter-spacing:0.03em">' + plate + '</span></td>' +
+                '<td>' + statusBadge + '</td>' +
+                '<td><a href="/enforcement?id=' + (v.id || '') + '" class="text-blue-500 hover:text-blue-600 text-xs font-medium">View</a></td>' +
+                '</tr>';
         }).join('');
     }
 
-    // Select camera: show feed + fly to marker
-    window._selectCam = function(camId){
-        const cam = cameras.find(c => c.id === camId);
-        if (!cam) return;
-
-        // Fly to marker
-        const marker = markers[camId];
-        if (marker) {
-            map.flyTo(marker.getLatLng(), 17, { animate: true, duration: 0.8 });
-            marker.openPopup();
+    function renderLiveFeed(violations){
+        var el = document.getElementById('live-feed');
+        if (!el) return;
+        if (!violations || !violations.length) {
+            el.innerHTML = '<div class="empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><p>Waiting for detections...</p></div>';
+            return;
         }
+        el.innerHTML = violations.slice(0, 8).map(function(v){
+            var type = typeLabels[v.violation_type] || v.violation_type || '—';
+            var plate = v.plate_text || '—';
+            var time = v.timestamp ? new Date(v.timestamp * 1000).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+            return '<div class="live-feed-item">' +
+                '<span class="live-feed-badge"></span>' +
+                '<span class="live-feed-text"><strong>' + type + '</strong> ' + plate + '</span>' +
+                '<span class="live-feed-time">' + time + '</span></div>';
+        }).join('');
+    }
 
-        // Switch feed
-        fetch('/api/switch_source', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: camId}) });
-        const img = document.getElementById('live-img');
-        const ph = document.getElementById('live-ph');
-        img.src = '/video_feed/' + camId + '?t=' + Date.now();
-        img.style.display = 'block';
-        ph.style.display = 'none';
-        document.getElementById('live-label').textContent = cam.name;
-    };
+    function renderInsights(narrative, recs){
+        var items = [];
+        if (narrative && narrative[0]) items.push({icon:'bg-blue-100 dark:bg-blue-900/30', svg:'<svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>', text:narrative[0]});
+        if (narrative && narrative[1]) items.push({icon:'bg-red-100 dark:bg-red-900/30', svg:'<svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>', text:narrative[1]});
+        if (recs && recs[0]) items.push({icon:'bg-amber-100 dark:bg-amber-900/30', svg:'<svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>', text:'Rec: ' + (recs[0].recommendation || '').replace(/_/g, ' ')});
+        if (!items.length) items.push({icon:'bg-emerald-100 dark:bg-emerald-900/30', svg:'<svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>', text:'No critical insights at this time.'});
 
-    loadData();
-    setInterval(async () => {
-        const r = await fetch('/api/violations?limit=10');
-        const d = await r.json();
-        renderViolations(d.violations || []);
-    }, 10000);
+        var container = document.getElementById('insights-container');
+        if (container) {
+            container.innerHTML = items.map(function(item){
+                return '<div class="insight-card">' +
+                    '<div class="insight-icon ' + item.icon + '">' + item.svg + '</div>' +
+                    '<p><strong>Insight:</strong> ' + item.text + '</p></div>';
+            }).join('');
+        }
+    }
+
+    function initMap(){
+        var mapEl = document.getElementById('map');
+        if (!mapEl || typeof L === 'undefined') return;
+        if (window._dashMap) { window._dashMap.remove(); window._dashMap = null; }
+
+        var isD = isDark();
+        var tileUrl = isD
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+        window._dashMap = L.map(mapEl).setView([-6.2146, 106.8020], 12);
+        window._dashTileLayer = L.tileLayer(tileUrl, { attribution: '© CARTO', maxZoom: 18 }).addTo(window._dashMap);
+
+        if (cachedSources) {
+            (cachedSources || []).forEach(function(c){
+                if (c.lat && c.lng) {
+                    L.circleMarker([c.lat, c.lng], {radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.6})
+                        .addTo(window._dashMap).bindPopup('<b>' + (c.name || c.id) + '</b>');
+                }
+            });
+        }
+    }
+
+    async function loadDashboard(){
+        updateClock();
+
+        // KPI from executive_summary
+        try {
+            var r = await fetch('/api/violations/executive_summary?period=30d');
+            var d = await r.json();
+            if (d.status === 'success') {
+                var s = d.summary || {};
+                var totalAll = s.total_all_time || s.total || 0;
+                var todayCount = s.total || 0;
+                var pendingCount = s.pending || 0;
+                var delta = d.delta_pct || 0;
+
+                document.getElementById('kpi-total-v').textContent = totalAll.toLocaleString();
+                formatDeltaBadge('kpi-delta-v', delta, 'vs last period');
+                document.getElementById('kpi-pending-v').textContent = pendingCount.toLocaleString();
+
+                var byType = (s.total > 0) ? (s.by_type || {}) : (s.by_type_all_time || s.by_type || {});
+                renderDonut(byType);
+
+                var recent = (d.recent && d.recent.length > 0) ? d.recent : (d.recent_all || []);
+                if (recent.length) {
+                    cachedViolations = recent;
+                    renderViolationsTable(recent, currentFilter);
+                    renderLiveFeed(recent);
+                }
+
+                renderInsights(d.narrative || [], d.top_recommendations || []);
+            }
+        } catch(e) { console.error('Executive summary error:', e); }
+
+        // Camera stats
+        try {
+            var r2 = await fetch('/api/stats');
+            var d2 = await r2.json();
+            if (d2.sources) {
+                cachedStats = d2;
+                var srcs = d2.sources;
+                var camCount = Object.keys(srcs).length;
+                var onlineCount = Object.values(srcs).filter(function(s){ return s.status === 'online' || s.status === 'simulated'; }).length;
+                document.getElementById('kpi-active-c').textContent = onlineCount.toLocaleString();
+                document.getElementById('kpi-total-c').textContent = camCount;
+
+                var detToday = d2.detections_today || 0;
+                if (!detToday) {
+                    var totalDet = 0;
+                    Object.values(srcs).forEach(function(s){ totalDet += parseInt(s.accumulated_count || 0, 10); });
+                    document.getElementById('kpi-det-today').textContent = totalDet.toLocaleString();
+                } else {
+                    document.getElementById('kpi-det-today').textContent = detToday.toLocaleString();
+                }
+            }
+        } catch(e) { console.error('Stats error:', e); }
+
+        // Camera grid + map
+        try {
+            if (!cachedSources) {
+                var r3 = await fetch('/api/sources');
+                cachedSources = await r3.json();
+            }
+            renderCameraGrid(cachedSources || []);
+            if (typeof L !== 'undefined') initMap();
+        } catch(e) { console.error('Sources error:', e); }
+
+        // Violations for table (50 for tab filtering)
+        try {
+            var r4 = await fetch('/api/violations?limit=50');
+            var d4 = await r4.json();
+            if (d4.status === 'success' && d4.violations && d4.violations.length) {
+                cachedViolations = d4.violations;
+                renderViolationsTable(d4.violations, currentFilter);
+                renderLiveFeed(d4.violations);
+            }
+        } catch(e) { console.error('Violations error:', e); }
+
+        // Trend chart
+        loadTrendData('30d');
+    }
+
+    // Tab filter
+    document.getElementById('violation-tab-group').addEventListener('click', function(e){
+        var btn = e.target.closest('.tab-btn');
+        if (!btn) return;
+        document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        currentFilter = btn.dataset.status || '';
+        renderViolationsTable(cachedViolations, currentFilter);
+    });
+
+    // Theme change handler
+    window.addEventListener('themechanged', function(){
+        loadTrendData(activePeriod);
+        if (typeof L !== 'undefined' && window._dashTileLayer && window._dashMap) {
+            var isD = isDark();
+            var tileUrl = isD
+                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+            window._dashMap.removeLayer(window._dashTileLayer);
+            window._dashTileLayer = L.tileLayer(tileUrl, { attribution: '© CARTO', maxZoom: 18 }).addTo(window._dashMap);
+        }
+    });
+
+    // Clock
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Load Leaflet CSS + JS dynamically
+    var leafletCss = document.createElement('link');
+    leafletCss.rel = 'stylesheet';
+    leafletCss.href = 'https://unpkg.com/leaflet@1.9/dist/leaflet.css';
+    document.head.appendChild(leafletCss);
+
+    var leafletJs = document.createElement('script');
+    leafletJs.src = 'https://unpkg.com/leaflet@1.9/dist/leaflet.js';
+    leafletJs.onload = function(){ initMap(); };
+    document.head.appendChild(leafletJs);
+
+    loadDashboard();
+    setInterval(loadDashboard, 60000);
 })();
 </script>
 {% endblock %}

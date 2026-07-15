@@ -60,7 +60,7 @@ class BatchInferenceWorker(threading.Thread):
     - Consistent latency for all cameras
     """
 
-    def __init__(self, max_batch_size: int = 8, max_wait_ms: float = 50.0):
+    def __init__(self, max_batch_size: int = 12, max_wait_ms: float = 60.0):
         super().__init__(daemon=True)
         self.max_batch_size = max_batch_size
         self.max_wait_ms = max_wait_ms
@@ -195,10 +195,12 @@ class BatchInferenceWorker(threading.Thread):
                     "imgsz": int(app_config.INFER_IMGSZ or 640),
                     "augment": False,
                     "agnostic_nms": False,
+                    # YOLO11m optimizations
+                    "half": bool(getattr(g, "use_gpu", False)),  # Half precision on GPU for ~2x speed
+                    "int8": False,  # Int8 not needed, keep FP16
                 }
                 if bool(getattr(g, "use_gpu", False)):
                     call_kwargs["device"] = 0
-                    call_kwargs["half"] = True
 
                 # Batch inference: pass list of frames
                 try:
@@ -306,7 +308,7 @@ def get_batch_worker() -> BatchInferenceWorker:
     if _batch_worker is None or not _batch_worker.is_alive():
         with _batch_worker_lock:
             if _batch_worker is None or not _batch_worker.is_alive():
-                _batch_worker = BatchInferenceWorker(max_batch_size=8, max_wait_ms=50)
+                _batch_worker = BatchInferenceWorker(max_batch_size=12, max_wait_ms=60)
                 _batch_worker.start()
     return _batch_worker
 

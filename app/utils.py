@@ -390,12 +390,44 @@ def get_datalake_stats(date_str=None):
         print(f"[ERROR] Failed to read Data Lake: {e}")
         return {"error": str(e)}
 
+def _validate_camera_entry(cam, index):
+    """Validate a single camera config entry. Returns (is_valid, cleaned_entry or None)."""
+    if not isinstance(cam, dict):
+        return False, None
+    required_fields = ["id", "name", "url"]
+    for field in required_fields:
+        if not cam.get(field):
+            print(f"[WARN] Camera[{index}] missing required field '{field}' — skipped")
+            return False, None
+    return True, {
+        "id": str(cam["id"]),
+        "name": str(cam["name"]),
+        "url": str(cam["url"]),
+        "active": bool(cam.get("active", False)),
+        "lat": float(cam["lat"]) if cam.get("lat") not in (None, "") else None,
+        "lng": float(cam["lng"]) if cam.get("lng") not in (None, "") else None,
+        "external_id": str(cam["external_id"]) if cam.get("external_id") else None,
+    }
+
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return []
     try:
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+        if not isinstance(data, list):
+            print(f"[WARN] Config file is not a list — resetting to empty")
+            return []
+        validated = []
+        for i, cam in enumerate(data):
+            ok, cleaned = _validate_camera_entry(cam, i)
+            if ok:
+                validated.append(cleaned)
+        return validated
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Config file corrupted (JSON error): {e} — resetting to empty")
+        return []
     except Exception as e:
         print(f"[ERROR] Failed to load config: {e}")
         return []
@@ -937,3 +969,156 @@ def get_history_series(history, period="30m", start_ts=None):
             buckets[idx]["motors"] += item.get("new_motors", 0)
             
     return buckets
+
+
+def auto_backfill_vehicle_identity():
+    """Background thread: periodically scan violations without vehicle details and fill them.
+    
+    Runs every 30 seconds, processes up to 5 violations per cycle.
+    Uses evidence images on disk + AI vision to identify plate, make/model, color.
+    """
+    import cv2
+    from app.config import EVIDENCE_DIR
+    
+    # Wait for app to fully start
+    time.sleep(15)
+    print("[BACKFILL] Auto vehicle identity backfill started")
+    
+    while True:
+        try:
+            from app.database import get_db_connection, _execute
+            
+            conn = get_db_connection(timeout_s=5)
+            try:
+                c = _execute(conn,
+                    """SELECT id, evidence_path, camera_id, plate_text 
+                       FROM violations 
+                       WHERE (notes IS NULL OR notes = '') 
+                         AND evidence_path IS NOT NULL 
+                       ORDER BY id DESC LIMIT 5""",
+                    ()
+                )
+                rows = c.fetchall()
+            finally:
+                conn.close()
+            
+            if not rows:
+                time.sleep(60)
+                continue
+            
+            for row in rows:
+                if hasattr(row, 'keys'):
+                    r = dict(row)
+                elif hasattr(row, '__getitem__') and not isinstance(row, dict):
+                    # sqlite3.Row
+                    r = dict(row)
+                else:
+                    r = row
+                vid = r.get('id')
+                evidence_path = r.get('evidence_path')
+                camera_id = r.get('camera_id')
+                existing_plate = r.get('plate_text')
+                
+                if not evidence_path:
+                    continue
+                
+                img_path = os.path.join(EVIDENCE_DIR, evidence_path.replace("/", os.sep))
+                if not os.path.isfile(img_path):
+                    # Try from parent dir (DB stores relative to data/ dir)
+                    img_path = os.path.join(os.path.dirname(EVIDENCE_DIR), evidence_path.replace("/", os.sep))
+                if not os.path.isfile(img_path):
+                    # Mark as processed to avoid retrying
+                    try:
+                        conn = get_db_connection(timeout_s=3)
+                        _execute(conn, "UPDATE violations SET notes=? WHERE id=?", ("no_evidence_file", vid))
+                        conn.commit()
+                        conn.close()
+                    except Exception:
+                        pass
+                    continue
+                
+                img = cv2.imread(img_path)
+                if img is None:
+                    continue
+                
+                notes_parts = []
+                
+                # Read plate if missing
+                if not existing_plate:
+                    try:
+                        from app.services.ai_ocr import ai_read_plate_from_image
+                        plate_text, plate_conf = ai_read_plate_from_image(img)
+                        if plate_text and plate_conf > 0.3:
+                            try:
+                                conn = get_db_connection(timeout_s=5)
+                                _execute(conn, "UPDATE violations SET plate_text=?, plate_confidence=? WHERE id=?",
+                                         (plate_text, float(plate_conf), vid))
+                                conn.commit()
+                                conn.close()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                
+                # Identify vehicle
+                try:
+                    from app.services.ai_ocr import ai_identify_vehicle
+                    info = ai_identify_vehicle(img)
+                    if info:
+                        if info.get('vehicle_type') and info['vehicle_type'] not in ('Unknown', 'N/A', ''):
+                            notes_parts.append(f"Jenis: {info['vehicle_type']}")
+                        if info.get('company') and info['company'] not in ('Private', 'Unknown', 'N/A', ''):
+                            notes_parts.append(f"Perusahaan: {info['company']}")
+                        if info.get('make_model') and info['make_model'] not in ('Unknown', 'N/A', ''):
+                            notes_parts.append(f"Merek/Model: {info['make_model']}")
+                        if info.get('color') and info['color'] not in ('Unknown', 'N/A', ''):
+                            notes_parts.append(f"Warna: {info['color']}")
+                        if info.get('registration_area') and info['registration_area'] not in ('Unknown', 'N/A', ''):
+                            notes_parts.append(f"Daerah: {info['registration_area']}")
+                        
+                        # Update vehicle_class
+                        vtype = info.get('vehicle_type', '')
+                        if vtype and vtype not in ('Unknown', 'N/A', ''):
+                            try:
+                                conn = get_db_connection(timeout_s=5)
+                                _execute(conn, "UPDATE violations SET vehicle_class=? WHERE id=?", (vtype, vid))
+                                conn.commit()
+                                conn.close()
+                            except Exception:
+                                pass
+                        
+                        # Use AI plate if OCR didn't find one
+                        ai_plate = info.get('plate', '')
+                        if ai_plate and ai_plate not in ('N/A', 'Unknown', '') and not existing_plate:
+                            try:
+                                conn = get_db_connection(timeout_s=5)
+                                _execute(conn, "UPDATE violations SET plate_text=?, plate_confidence=? WHERE id=? AND (plate_text IS NULL OR plate_text='')",
+                                         (ai_plate, 0.7, vid))
+                                conn.commit()
+                                conn.close()
+                                notes_parts.append(f"Plat: {ai_plate}")
+                            except Exception:
+                                pass
+                except Exception as e:
+                    print(f"[BACKFILL] id={vid} | AI error: {e}")
+                
+                # Save notes
+                notes_str = " | ".join(notes_parts) if notes_parts else "processed"
+                try:
+                    conn = get_db_connection(timeout_s=5)
+                    _execute(conn, "UPDATE violations SET notes=? WHERE id=?", (notes_str, vid))
+                    conn.commit()
+                    conn.close()
+                    if notes_parts:
+                        print(f"[BACKFILL] id={vid} | {notes_str}")
+                except Exception:
+                    pass
+                
+                # Small delay between API calls to avoid rate limiting
+                time.sleep(2)
+        
+        except Exception as e:
+            print(f"[BACKFILL] Loop error: {e}")
+        
+        # Wait before next batch
+        time.sleep(30)

@@ -5,6 +5,14 @@ import platform
 
 sys.dont_write_bytecode = True
 
+# Load .env file if it exists (auto-read environment variables)
+try:
+    from dotenv import load_dotenv
+    dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    load_dotenv(dotenv_path, override=False)
+except ImportError:
+    pass  # python-dotenv not installed — env vars must be set manually
+
 os.environ.setdefault("OLLAMA_MODEL", "mistral:7b")
 
 deps_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".deps")

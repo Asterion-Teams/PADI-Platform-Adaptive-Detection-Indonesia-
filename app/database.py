@@ -1,12 +1,34 @@
-import sqlite3
 import os
 import time
 import datetime
 import json
 import threading
+import sqlite3
 from app.config import DATA_DIR
 
+# PostgreSQL connection settings — MUST be set via environment variables
+PG_HOST = os.environ.get("PG_HOST") or "localhost"
+PG_PORT = int(os.environ.get("PG_PORT") or 5432)
+PG_USER = os.environ.get("PG_USER") or "postgres"
+PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
+if not PG_PASSWORD:
+    raise RuntimeError(
+        "[DB] FATAL: PG_PASSWORD environment variable must be set! "
+        "Database connection refused for security reasons."
+    )
+PG_DATABASE = os.environ.get("PG_DATABASE") or "padi_traffic"
+
+# Legacy SQLite path (for migration reference)
 DB_PATH = os.path.join(DATA_DIR, "traffic_data.db")
+
+try:
+    import psycopg2
+    import psycopg2.extras
+    _USE_POSTGRES = True
+except ImportError:
+    import sqlite3
+    _USE_POSTGRES = False
+    print("[DB] WARNING: psycopg2 not installed, falling back to SQLite")
 
 try:
     import torch
@@ -21,7 +43,21 @@ _transformer_models = {}
 _transformer_training = set()
 _transformer_training_lock = threading.Lock()
 
+
+class _PgRowDict(dict):
+    """Dict-like row that also supports index access like sqlite3.Row."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+    
+    def keys(self):
+        return super().keys()
+
+
 def _apply_sqlite_pragmas(conn, busy_timeout_ms=30000):
+    if _USE_POSTGRES:
+        return
     try:
         conn.execute("PRAGMA synchronous=NORMAL;")
     except Exception:
@@ -35,7 +71,20 @@ def _apply_sqlite_pragmas(conn, busy_timeout_ms=30000):
     except Exception:
         pass
 
+
 def get_db_connection(timeout_s=30, busy_timeout_ms=None):
+    if _USE_POSTGRES:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT,
+            user=PG_USER, password=PG_PASSWORD,
+            database=PG_DATABASE,
+            connect_timeout=int(timeout_s or 30),
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+        conn.autocommit = False
+        return conn
+    
+    # SQLite fallback
     timeout_s = float(timeout_s or 0)
     if timeout_s <= 0:
         timeout_s = 1.0
@@ -48,6 +97,37 @@ def get_db_connection(timeout_s=30, busy_timeout_ms=None):
     conn.row_factory = sqlite3.Row
     _apply_sqlite_pragmas(conn, busy_timeout_ms=busy_timeout_ms)
     return conn
+
+
+def _execute(conn, sql, params=None):
+    """Execute SQL with automatic ? -> %s conversion for PostgreSQL."""
+    if _USE_POSTGRES:
+        # Convert SQLite ? placeholders to PostgreSQL %s
+        sql = sql.replace("?", "%s")
+        # Convert AUTOINCREMENT to SERIAL (handled in CREATE TABLE)
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(sql, params or ())
+        return cur
+    else:
+        return conn.execute(sql, params or ())
+
+
+def _fetchall(conn, sql, params=None):
+    """Execute and fetchall with proper cursor handling."""
+    cur = _execute(conn, sql, params)
+    rows = cur.fetchall()
+    if _USE_POSTGRES:
+        return [dict(r) for r in rows]
+    return rows
+
+
+def _fetchone(conn, sql, params=None):
+    """Execute and fetchone."""
+    cur = _execute(conn, sql, params)
+    row = cur.fetchone()
+    if _USE_POSTGRES and row:
+        return dict(row)
+    return row
 
 def _local_tzinfo():
     return datetime.datetime.now().astimezone().tzinfo
@@ -64,9 +144,9 @@ def _build_hourly_series(camera_id, days=60):
     tzinfo = _local_tzinfo()
     cutoff = time.time() - (float(days or 60) * 24 * 3600)
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
+        rows = _fetchall(
+            conn,
             """
             SELECT timestamp, new_count
             FROM traffic_history
@@ -76,7 +156,6 @@ def _build_hourly_series(camera_id, days=60):
             """,
             (camera_id, cutoff),
         )
-        rows = c.fetchall()
     finally:
         conn.close()
 
@@ -305,6 +384,118 @@ def _predict_with_transformer(camera_id, target_dt_local, context_len=48):
 
 def init_db():
     conn = get_db_connection(timeout_s=10)
+    
+    if _USE_POSTGRES:
+        conn.autocommit = True
+        c = conn.cursor()
+        
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS traffic_history (
+                id SERIAL PRIMARY KEY,
+                camera_id TEXT NOT NULL,
+                timestamp DOUBLE PRECISION NOT NULL,
+                total_count INTEGER DEFAULT 0,
+                car_count INTEGER DEFAULT 0,
+                motorcycle_count INTEGER DEFAULT 0,
+                new_count INTEGER DEFAULT 0,
+                new_cars INTEGER DEFAULT 0,
+                new_motors INTEGER DEFAULT 0
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_camera_timestamp ON traffic_history (camera_id, timestamp)')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS chat_profile (
+                session_id TEXT PRIMARY KEY,
+                updated_ts DOUBLE PRECISION NOT NULL,
+                last_intent TEXT,
+                last_camera_id TEXT,
+                last_camera_name TEXT,
+                last_destination TEXT,
+                prefs_json TEXT
+            )
+        ''')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                ts DOUBLE PRECISION NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                page TEXT,
+                meta_json TEXT
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_session_ts ON chat_messages (session_id, ts)')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS violation_zones (
+                id SERIAL PRIMARY KEY,
+                camera_id TEXT NOT NULL,
+                name TEXT,
+                zone_type TEXT NOT NULL,
+                geometry_json TEXT NOT NULL,
+                active INTEGER DEFAULT 1,
+                notes TEXT,
+                created_ts DOUBLE PRECISION NOT NULL,
+                frame_width INTEGER DEFAULT 0,
+                frame_height INTEGER DEFAULT 0
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_zones_camera ON violation_zones (camera_id, active)')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS violations (
+                id SERIAL PRIMARY KEY,
+                camera_id TEXT NOT NULL,
+                camera_name TEXT,
+                zone_id INTEGER,
+                zone_type TEXT NOT NULL,
+                violation_type TEXT NOT NULL,
+                timestamp DOUBLE PRECISION NOT NULL,
+                duration_s DOUBLE PRECISION DEFAULT 0,
+                vehicle_class TEXT,
+                plate_text TEXT,
+                plate_confidence DOUBLE PRECISION DEFAULT 0,
+                bbox_json TEXT,
+                evidence_path TEXT,
+                lat DOUBLE PRECISION,
+                lng DOUBLE PRECISION,
+                status TEXT DEFAULT 'pending',
+                dispatched_unit TEXT,
+                notes TEXT
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_violations_ts ON violations (timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_violations_cam ON violations (camera_id, timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_violations_type ON violations (violation_type, timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_violations_plate ON violations (plate_text)')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS crm_reports (
+                id SERIAL PRIMARY KEY,
+                timestamp DOUBLE PRECISION NOT NULL,
+                reporter_name TEXT,
+                reporter_contact TEXT,
+                category TEXT,
+                description TEXT,
+                lat DOUBLE PRECISION,
+                lng DOUBLE PRECISION,
+                camera_id TEXT,
+                status TEXT DEFAULT 'open',
+                auto_classified_type TEXT,
+                priority TEXT DEFAULT 'normal'
+            )
+        ''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_crm_ts ON crm_reports (timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_crm_status ON crm_reports (status, timestamp)')
+        
+        conn.close()
+        print(f"[DB] PostgreSQL initialized: {PG_DATABASE}@{PG_HOST}:{PG_PORT}")
+        return
+
+    # SQLite fallback
     c = conn.cursor()
     try:
         c.execute("PRAGMA journal_mode=WAL;")
@@ -457,10 +648,8 @@ def get_chat_profile(session_id):
     if not sid:
         return {}
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
-        c.execute("SELECT * FROM chat_profile WHERE session_id = ?", (sid,))
-        row = c.fetchone()
+        row = _fetchone(conn, "SELECT * FROM chat_profile WHERE session_id = ?", (sid,))
         if not row:
             return {}
         out = dict(row)
@@ -486,9 +675,9 @@ def upsert_chat_profile(session_id, fields):
         except Exception:
             prefs_json = "{}"
     conn = get_db_connection(timeout_s=5)
-    c = conn.cursor()
     try:
-        c.execute(
+        _execute(
+            conn,
             """
             INSERT INTO chat_profile (session_id, updated_ts, last_intent, last_camera_id, last_camera_name, last_destination, prefs_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -534,9 +723,9 @@ def add_chat_message(session_id, role, content, page=None, meta=None):
     except Exception:
         meta_json = None
     conn = get_db_connection(timeout_s=5)
-    c = conn.cursor()
     try:
-        c.execute(
+        _execute(
+            conn,
             "INSERT INTO chat_messages (session_id, ts, role, content, page, meta_json) VALUES (?, ?, ?, ?, ?, ?)",
             (sid, time.time(), r, txt, str(page or "") or None, meta_json),
         )
@@ -560,13 +749,12 @@ def get_recent_chat_messages(session_id, limit=12):
         lim = 12
     lim = min(50, lim)
     conn = get_db_connection(timeout_s=3)
-    c = conn.cursor()
     try:
-        c.execute(
+        rows = _fetchall(
+            conn,
             "SELECT ts, role, content FROM chat_messages WHERE session_id = ? ORDER BY ts DESC LIMIT ?",
             (sid, lim),
         )
-        rows = c.fetchall() or []
         out = []
         for r in reversed(rows):
             out.append({"ts": r["ts"], "role": r["role"], "content": r["content"]})
@@ -577,43 +765,56 @@ def get_recent_chat_messages(session_id, limit=12):
 def insert_history_batch(records):
     """
     Batch insert records.
-    records: list of tuples (camera_id, timestamp, total, cars, motors)
+    records: list of tuples (camera_id, timestamp, total, cars, motors, new_count, new_cars, new_motors)
     """
     if not records:
         return
 
-    insert_sql = '''
-        INSERT INTO traffic_history (camera_id, timestamp, total_count, car_count, motorcycle_count, new_count, new_cars, new_motors)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    '''
+    if _USE_POSTGRES:
+        insert_sql = '''
+            INSERT INTO traffic_history (camera_id, timestamp, total_count, car_count, motorcycle_count, new_count, new_cars, new_motors)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        '''
+    else:
+        insert_sql = '''
+            INSERT INTO traffic_history (camera_id, timestamp, total_count, car_count, motorcycle_count, new_count, new_cars, new_motors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        '''
 
     last_err = None
-    for attempt in range(5):
-        conn = get_db_connection(timeout_s=30)
-        c = conn.cursor()
+    for attempt in range(3):
+        conn = get_db_connection(timeout_s=10)
         try:
-            c.executemany(insert_sql, records)
-            conn.commit()
+            c = conn.cursor()
+            if _USE_POSTGRES:
+                # PostgreSQL: use execute_batch for efficient bulk insert (no per-row loop)
+                try:
+                    from psycopg2.extras import execute_batch
+                    execute_batch(c, insert_sql, records, page_size=500)
+                except (ImportError, AttributeError):
+                    # Fallback: executemany (still more efficient than per-row loop)
+                    for rec in records:
+                        c.execute(insert_sql, rec)
+                conn.commit()
+            else:
+                # SQLite: executemany is natively efficient
+                c.executemany(insert_sql, records)
+                conn.commit()
             conn.close()
             return
-        except sqlite3.OperationalError as e:
-            last_err = e
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            conn.close()
-            if "locked" in str(e).lower():
-                time.sleep(0.05 * (2 ** attempt))
-                continue
-            break
         except Exception as e:
             last_err = e
             try:
                 conn.rollback()
             except Exception:
                 pass
-            conn.close()
+            try:
+                conn.close()
+            except Exception:
+                pass
+            if "locked" in str(e).lower():
+                time.sleep(0.1 * (2 ** attempt))
+                continue
             break
     if last_err is not None:
         print(f"Error inserting batch: {last_err}")
@@ -631,8 +832,6 @@ def clear_all_history():
 
 def get_camera_history(camera_id, start_ts=None, end_ts=None):
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
-    
     query = "SELECT timestamp, total_count, car_count, motorcycle_count, new_count, new_cars, new_motors FROM traffic_history WHERE camera_id = ?"
     params = [camera_id]
     
@@ -646,23 +845,23 @@ def get_camera_history(camera_id, start_ts=None, end_ts=None):
         
     query += " ORDER BY timestamp ASC"
     
-    c.execute(query, params)
-    rows = c.fetchall()
-    conn.close()
-    
-    # Convert to list of dicts to match existing API format
-    return [
-        {
-            "ts": row["timestamp"],
-            "count": row["total_count"],
-            "cars": row["car_count"],
-            "motors": row["motorcycle_count"],
-            "new_count": row["new_count"],
-            "new_cars": row["new_cars"],
-            "new_motors": row["new_motors"]
-        }
-        for row in rows
-    ]
+    try:
+        rows = _fetchall(conn, query, params)
+        # Convert to list of dicts to match existing API format
+        return [
+            {
+                "ts": row["timestamp"],
+                "count": row["total_count"],
+                "cars": row["car_count"],
+                "motors": row["motorcycle_count"],
+                "new_count": row["new_count"],
+                "new_cars": row["new_cars"],
+                "new_motors": row["new_motors"]
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
 
 def predict_future_traffic(camera_id, day_of_week, hour_of_day, target_dt_local=None):
     """
@@ -696,7 +895,6 @@ def predict_future_traffic(camera_id, day_of_week, hour_of_day, target_dt_local=
                 t.start()
 
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     
     # Calculate average hourly volume for this specific time slot across all historical data
     query = '''
@@ -715,8 +913,7 @@ def predict_future_traffic(camera_id, day_of_week, hour_of_day, target_dt_local=
     '''
     
     try:
-        c.execute(query, (camera_id, day_of_week, hour_of_day))
-        result = c.fetchone()
+        result = _fetchone(conn, query, (camera_id, day_of_week, hour_of_day))
         avg_traffic = result['avg_hourly_traffic'] if result and result['avg_hourly_traffic'] is not None else 0
     except Exception as e:
         print(f"Prediction Error: {e}")
@@ -752,7 +949,6 @@ def get_total_lifetime():
 
 def get_totals_by_camera(camera_ids=None, start_ts=None, end_ts=None):
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
         params = []
         conditions = []
@@ -768,7 +964,8 @@ def get_totals_by_camera(camera_ids=None, start_ts=None, end_ts=None):
             params.append(end_ts)
         where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        c.execute(
+        cur = _execute(
+            conn,
             f"""
             SELECT
                 camera_id,
@@ -780,7 +977,7 @@ def get_totals_by_camera(camera_ids=None, start_ts=None, end_ts=None):
             """,
             params,
         )
-        rows = c.fetchall()
+        rows = cur.fetchall()
         out = {}
         for row in rows:
             total = int((row["cars"] or 0) + (row["motors"] or 0))
@@ -800,17 +997,19 @@ def get_aggregated_stats(days=30):
     Get aggregated stats for the last N days.
     """
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
         cutoff = time.time() - (days * 24 * 3600)
-        c.execute("""
+        row = _fetchone(
+            conn,
+            """
             SELECT 
                 COALESCE(SUM(new_cars), 0) as cars,
                 COALESCE(SUM(new_motors), 0) as motors
             FROM traffic_history
             WHERE timestamp >= ?
-        """, (cutoff,))
-        row = c.fetchone()
+            """,
+            (cutoff,),
+        )
         total = 0
         if row:
             total = int((row["cars"] or 0) + (row["motors"] or 0))
@@ -831,7 +1030,6 @@ def get_history_range(camera_id=None, start_ts=None, end_ts=None):
     Returns list of dicts including camera_id.
     """
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
         conditions = []
         params = []
@@ -852,8 +1050,8 @@ def get_history_range(camera_id=None, start_ts=None, end_ts=None):
             {where_clause}
             ORDER BY camera_id, timestamp ASC
         """
-        c.execute(query, params)
-        rows = c.fetchall()
+        cur = _execute(conn, query, params)
+        rows = cur.fetchall()
         return [
             {
                 "camera_id": row["camera_id"],
@@ -874,9 +1072,9 @@ def get_history_range(camera_id=None, start_ts=None, end_ts=None):
 
 def get_last_history_row(camera_id):
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
-        c.execute(
+        row = _fetchone(
+            conn,
             """
             SELECT timestamp, total_count, car_count, motorcycle_count, new_count, new_cars, new_motors
             FROM traffic_history
@@ -886,7 +1084,6 @@ def get_last_history_row(camera_id):
             """,
             (camera_id,),
         )
-        row = c.fetchone()
         if not row:
             return None
         return {
@@ -903,9 +1100,9 @@ def get_last_history_row(camera_id):
 
 def get_recent_history_averages(camera_id, start_ts, end_ts):
     conn = get_db_connection(timeout_s=2)
-    c = conn.cursor()
     try:
-        c.execute(
+        row = _fetchone(
+            conn,
             """
             SELECT
                 AVG(total_count) as avg_total,
@@ -922,7 +1119,6 @@ def get_recent_history_averages(camera_id, start_ts, end_ts):
             """,
             (camera_id, start_ts, end_ts),
         )
-        row = c.fetchone()
         if not row or row["n"] == 0:
             return None
         return {
@@ -949,9 +1145,9 @@ def insert_zone(camera_id, zone_type, geometry, name=None, notes=None, active=Tr
     polygon coordinates were drawn; the enforcement engine uses them to scale at runtime.
     """
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
+        cur = _execute(
+            conn,
             """
             INSERT INTO violation_zones (camera_id, name, zone_type, geometry_json,
                                          active, notes, created_ts, frame_width, frame_height)
@@ -970,7 +1166,7 @@ def insert_zone(camera_id, zone_type, geometry, name=None, notes=None, active=Tr
             ),
         )
         conn.commit()
-        return int(c.lastrowid)
+        return int(cur.lastrowid)
     finally:
         conn.close()
 
@@ -994,41 +1190,39 @@ def update_zone(zone_id, **fields):
         return False
     params.append(int(zone_id))
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(f"UPDATE violation_zones SET {', '.join(sets)} WHERE id = ?", params)
+        cur = _execute(conn, f"UPDATE violation_zones SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
-        return c.rowcount > 0
+        return cur.rowcount > 0
     finally:
         conn.close()
 
 
 def delete_zone(zone_id):
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute("DELETE FROM violation_zones WHERE id = ?", (int(zone_id),))
+        cur = _execute(conn, "DELETE FROM violation_zones WHERE id = ?", (int(zone_id),))
         conn.commit()
-        return c.rowcount > 0
+        return cur.rowcount > 0
     finally:
         conn.close()
 
 
 def get_zones_for_camera(camera_id, only_active=True):
     conn = get_db_connection()
-    c = conn.cursor()
     try:
         if only_active:
-            c.execute(
+            rows = _fetchall(
+                conn,
                 "SELECT * FROM violation_zones WHERE camera_id = ? AND active = 1 ORDER BY id",
                 (str(camera_id),),
             )
         else:
-            c.execute(
+            rows = _fetchall(
+                conn,
                 "SELECT * FROM violation_zones WHERE camera_id = ? ORDER BY id",
                 (str(camera_id),),
             )
-        rows = c.fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -1044,10 +1238,8 @@ def get_zones_for_camera(camera_id, only_active=True):
 
 def get_all_zones():
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute("SELECT * FROM violation_zones ORDER BY camera_id, id")
-        rows = c.fetchall()
+        rows = _fetchall(conn, "SELECT * FROM violation_zones ORDER BY camera_id, id")
         out = []
         for r in rows:
             d = dict(r)
@@ -1080,10 +1272,19 @@ def insert_violation(
     dispatched_unit=None,
     notes=None,
 ):
+    # Validate required fields
+    if not camera_id:
+        raise ValueError("camera_id is required for insert_violation")
+    if not violation_type:
+        raise ValueError("violation_type is required for insert_violation")
+    if not zone_type:
+        raise ValueError("zone_type is required for insert_violation")
+    if timestamp is None:
+        raise ValueError("timestamp is required for insert_violation")
+
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
+        c = _execute(conn,
             """
             INSERT INTO violations (
                 camera_id, camera_name, zone_id, zone_type, violation_type,
@@ -1113,6 +1314,68 @@ def insert_violation(
         )
         conn.commit()
         return int(c.lastrowid)
+    finally:
+        conn.close()
+
+
+def update_violation_plate(camera_id, min_timestamp, plate_text, plate_confidence, only_if_null=True):
+    """Update the most recent violation for a camera with plate info.
+    
+    Works correctly on both SQLite and PostgreSQL.
+    """
+    conn = get_db_connection(timeout_s=5)
+    try:
+        if _USE_POSTGRES:
+            null_cond = "AND plate_text IS NULL" if only_if_null else ""
+            sql = f"""
+                UPDATE violations SET plate_text = %s, plate_confidence = %s
+                WHERE id = (
+                    SELECT id FROM violations
+                    WHERE camera_id = %s AND timestamp > %s {null_cond}
+                    ORDER BY id DESC LIMIT 1
+                )
+            """
+            c = conn.cursor()
+            c.execute(sql, (plate_text, float(plate_confidence), str(camera_id), float(min_timestamp)))
+        else:
+            null_cond = "AND plate_text IS NULL" if only_if_null else ""
+            sql = f"UPDATE violations SET plate_text=?, plate_confidence=? WHERE camera_id=? AND timestamp > ? {null_cond} ORDER BY id DESC LIMIT 1"
+            conn.execute(sql, (plate_text, float(plate_confidence), str(camera_id), float(min_timestamp)))
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] update_violation_plate error: {e}")
+    finally:
+        conn.close()
+
+
+def update_violation_field(camera_id, min_timestamp, field, value):
+    """Update a single field on the most recent violation for a camera.
+    
+    Works correctly on both SQLite and PostgreSQL.
+    Allowed fields: vehicle_class, notes
+    """
+    allowed = {"vehicle_class", "notes"}
+    if field not in allowed:
+        return
+    conn = get_db_connection(timeout_s=5)
+    try:
+        if _USE_POSTGRES:
+            sql = f"""
+                UPDATE violations SET {field} = %s
+                WHERE id = (
+                    SELECT id FROM violations
+                    WHERE camera_id = %s AND timestamp > %s
+                    ORDER BY id DESC LIMIT 1
+                )
+            """
+            c = conn.cursor()
+            c.execute(sql, (value, str(camera_id), float(min_timestamp)))
+        else:
+            sql = f"UPDATE violations SET {field}=? WHERE camera_id=? AND timestamp > ? ORDER BY id DESC LIMIT 1"
+            conn.execute(sql, (value, str(camera_id), float(min_timestamp)))
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] update_violation_field({field}) error: {e}")
     finally:
         conn.close()
 
@@ -1151,27 +1414,51 @@ def list_violations(
     sql = f"SELECT * FROM violations{where_sql} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
     params.extend([int(limit), int(offset)])
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(sql, params)
-        rows = [dict(r) for r in c.fetchall()]
-        # Parse bbox JSON
+        c = _execute(conn, sql, params)
+        rows = list(c.fetchall())
+        # Convert sqlite3.Row to dict
+        result = []
         for r in rows:
+            if hasattr(r, 'keys'):
+                result.append(dict(r))
+            else:
+                result.append(r)
+        # Parse bbox JSON and extract vehicle details from notes
+        import re as _re
+        for r in result:
             try:
                 r["bbox"] = json.loads(r.get("bbox_json") or "null")
             except Exception:
                 r["bbox"] = None
-        return rows
+            # Parse vehicle details from notes field
+            # Format: "Jenis: MPV (88%) | Merek/Model: Toyota Avanza (85%) | Warna: Biru (85%) | Plat: B 2659 BUC (92%)"
+            r["vehicle_details"] = {}
+            notes = r.get("notes") or ""
+            if notes:
+                parts = notes.split(' | ')
+                for part in parts:
+                    part = part.strip()
+                    # More flexible regex that allows for trailing characters
+                    match = _re.match(r'^(Jenis|Merek/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+?)\s*\((\d+)%\)', part)
+                    if match:
+                        field, value, conf = match.groups()
+                        r["vehicle_details"][field] = {"value": value.strip(), "confidence": int(conf)}
+                    else:
+                        # Try alternate format without percentage
+                        match2 = _re.match(r'^(Jenis|Merek/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+)$', part)
+                        if match2:
+                            field, value = match2.groups()
+                            r["vehicle_details"][field] = {"value": value.strip(), "confidence": 0}
+        return result
     finally:
         conn.close()
 
 
 def get_violation(violation_id):
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute("SELECT * FROM violations WHERE id = ?", (int(violation_id),))
-        r = c.fetchone()
+        r = _fetchone(conn, "SELECT * FROM violations WHERE id = ?", (int(violation_id),))
         if not r:
             return None
         d = dict(r)
@@ -1179,6 +1466,25 @@ def get_violation(violation_id):
             d["bbox"] = json.loads(d.get("bbox_json") or "null")
         except Exception:
             d["bbox"] = None
+        # Parse vehicle details from notes field
+        import re as _re
+        d["vehicle_details"] = {}
+        notes = d.get("notes") or ""
+        if notes:
+            parts = notes.split(' | ')
+            for part in parts:
+                part = part.strip()
+                # More flexible regex that allows for trailing characters
+                match = _re.match(r'^(Jenis|Merek/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+?)\s*\((\d+)%\)', part)
+                if match:
+                    field, value, conf = match.groups()
+                    d["vehicle_details"][field] = {"value": value.strip(), "confidence": int(conf)}
+                else:
+                    # Try alternate format without percentage
+                    match2 = _re.match(r'^(Jenis|Merek/Model|Warna|Perusahaan|Plat|Daerah):\s*(.+)$', part)
+                    if match2:
+                        field, value = match2.groups()
+                        d["vehicle_details"][field] = {"value": value.strip(), "confidence": 0}
         return d
     finally:
         conn.close()
@@ -1187,7 +1493,7 @@ def get_violation(violation_id):
 def update_violation(violation_id, **fields):
     if not fields:
         return False
-    allowed = {"status", "dispatched_unit", "notes", "plate_text"}
+    allowed = {"status", "dispatched_unit", "notes", "plate_text", "plate_confidence", "vehicle_class"}
     sets = []
     params = []
     for k, v in fields.items():
@@ -1199,11 +1505,16 @@ def update_violation(violation_id, **fields):
         return False
     params.append(int(violation_id))
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(f"UPDATE violations SET {', '.join(sets)} WHERE id = ?", params)
+        cur = _execute(conn, f"UPDATE violations SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
-        return c.rowcount > 0
+        return cur.rowcount > 0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
     finally:
         conn.close()
 
@@ -1221,48 +1532,44 @@ def violation_summary(start_ts=None, end_ts=None):
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
 
     conn = get_db_connection()
-    c = conn.cursor()
     try:
         # Total
-        c.execute(f"SELECT COUNT(*) AS n FROM violations{where_sql}", params)
+        c = _execute(conn, f"SELECT COUNT(*) AS n FROM violations{where_sql}", params)
         total = int((c.fetchone() or {"n": 0})["n"] or 0)
 
         # By type
-        c.execute(
-            f"""
+        c = _execute(conn, f"""
             SELECT violation_type, COUNT(*) AS n
             FROM violations{where_sql}
             GROUP BY violation_type
             ORDER BY n DESC
-            """,
-            params,
-        )
-        by_type = {r["violation_type"]: int(r["n"]) for r in c.fetchall()}
+            """, params)
+        by_type = {r["violation_type"] if isinstance(r, dict) else r[0]: int(r["n"] if isinstance(r, dict) else r[1]) for r in c.fetchall()}
 
         # By camera
-        c.execute(
-            f"""
+        c = _execute(conn, f"""
             SELECT camera_id, camera_name, COUNT(*) AS n
             FROM violations{where_sql}
             GROUP BY camera_id, camera_name
             ORDER BY n DESC
             LIMIT 50
-            """,
-            params,
-        )
-        by_camera = [
-            {"camera_id": r["camera_id"], "camera_name": r["camera_name"], "count": int(r["n"])}
-            for r in c.fetchall()
-        ]
+            """, params)
+        by_camera = []
+        for r in c.fetchall():
+            if isinstance(r, dict):
+                by_camera.append({"camera_id": r["camera_id"], "camera_name": r["camera_name"], "count": int(r["n"])})
+            else:
+                by_camera.append({"camera_id": r[0], "camera_name": r[1], "count": int(r[2])})
 
         # By hour (0-23) - use local tz
-        c.execute(f"SELECT timestamp, violation_type FROM violations{where_sql}", params)
+        c = _execute(conn, f"SELECT timestamp, violation_type FROM violations{where_sql}", params)
         by_hour = [0] * 24
         by_dow = [0] * 7
         tzinfo = datetime.datetime.now().astimezone().tzinfo
         for r in c.fetchall():
             try:
-                dt = datetime.datetime.fromtimestamp(float(r["timestamp"]), tz=tzinfo)
+                ts = r["timestamp"] if isinstance(r, dict) else r[0]
+                dt = datetime.datetime.fromtimestamp(float(ts), tz=tzinfo)
                 by_hour[dt.hour] += 1
                 by_dow[(dt.weekday() + 1) % 7] += 1  # 0=Sun,...6=Sat
             except Exception:
@@ -1274,6 +1581,7 @@ def violation_summary(start_ts=None, end_ts=None):
             "by_camera": by_camera,
             "by_hour": by_hour,
             "by_day_of_week": by_dow,
+            "pending": total,
         }
     finally:
         conn.close()
@@ -1291,31 +1599,37 @@ def violation_heatmap_by_camera(start_ts=None, end_ts=None):
         params.append(float(end_ts))
     where_sql = " WHERE " + " AND ".join(where)
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
-            f"""
+        c = _execute(conn, f"""
             SELECT camera_id, camera_name, lat, lng, violation_type, COUNT(*) AS n
             FROM violations{where_sql}
             GROUP BY camera_id, camera_name, lat, lng, violation_type
-            """,
-            params,
-        )
+            """, params)
         agg = {}
         for r in c.fetchall():
-            key = r["camera_id"]
+            if isinstance(r, dict):
+                key = r["camera_id"]
+                lat_val = float(r["lat"])
+                lng_val = float(r["lng"])
+                vtype = r["violation_type"]
+                n = int(r["n"])
+            else:
+                key = r[0]
+                lat_val = float(r[2])
+                lng_val = float(r[3])
+                vtype = r[4]
+                n = int(r[5])
             if key not in agg:
                 agg[key] = {
-                    "camera_id": r["camera_id"],
-                    "camera_name": r["camera_name"],
-                    "lat": float(r["lat"]),
-                    "lng": float(r["lng"]),
+                    "camera_id": key,
+                    "camera_name": r["camera_name"] if isinstance(r, dict) else r[1],
+                    "lat": lat_val,
+                    "lng": lng_val,
                     "count": 0,
                     "by_type": {},
                 }
-            n = int(r["n"])
             agg[key]["count"] += n
-            agg[key]["by_type"][r["violation_type"]] = n
+            agg[key]["by_type"][vtype] = n
         return list(agg.values())
     finally:
         conn.close()
@@ -1334,9 +1648,9 @@ def insert_crm_report(
     status="open",
 ):
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
+        cur = _execute(
+            conn,
             """
             INSERT INTO crm_reports (
                 timestamp, reporter_name, reporter_contact, category, description,
@@ -1358,7 +1672,7 @@ def insert_crm_report(
             ),
         )
         conn.commit()
-        return int(c.lastrowid)
+        return int(cur.lastrowid)
     finally:
         conn.close()
 
@@ -1373,10 +1687,9 @@ def list_crm_reports(limit=100, offset=0, status=None):
     sql = f"SELECT * FROM crm_reports{where_sql} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
     params.extend([int(limit), int(offset)])
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(sql, params)
-        return [dict(r) for r in c.fetchall()]
+        rows = _fetchall(conn, sql, params)
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -1396,25 +1709,23 @@ def update_crm_report(report_id, **fields):
         return False
     params.append(int(report_id))
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(f"UPDATE crm_reports SET {', '.join(sets)} WHERE id = ?", params)
+        cur = _execute(conn, f"UPDATE crm_reports SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
-        return c.rowcount > 0
+        return cur.rowcount > 0
     finally:
         conn.close()
 
 
 def crm_summary():
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute("SELECT COUNT(*) AS n FROM crm_reports")
-        total = int((c.fetchone() or {"n": 0})["n"] or 0)
-        c.execute("SELECT status, COUNT(*) AS n FROM crm_reports GROUP BY status")
-        by_status = {r["status"]: int(r["n"]) for r in c.fetchall()}
-        c.execute("SELECT auto_classified_type, COUNT(*) AS n FROM crm_reports GROUP BY auto_classified_type")
-        by_type = {(r["auto_classified_type"] or "unclassified"): int(r["n"]) for r in c.fetchall()}
+        row = _fetchone(conn, "SELECT COUNT(*) AS n FROM crm_reports")
+        total = int((row or {"n": 0})["n"] or 0)
+        rows_status = _fetchall(conn, "SELECT status, COUNT(*) AS n FROM crm_reports GROUP BY status")
+        by_status = {r["status"]: int(r["n"]) for r in rows_status}
+        rows_type = _fetchall(conn, "SELECT auto_classified_type, COUNT(*) AS n FROM crm_reports GROUP BY auto_classified_type")
+        by_type = {(r["auto_classified_type"] or "unclassified"): int(r["n"]) for r in rows_type}
         return {"total": total, "by_status": by_status, "by_type": by_type}
     finally:
         conn.close()
@@ -1437,9 +1748,9 @@ def recommend_enforcement_points(top_n=10, start_ts=None, end_ts=None):
     recent_cutoff = end_ts - (7.0 * 24.0 * 3600.0)
 
     conn = get_db_connection()
-    c = conn.cursor()
     try:
-        c.execute(
+        rows = _fetchall(
+            conn,
             """
             SELECT camera_id, camera_name, violation_type, lat, lng,
                    SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) AS recent_n,
@@ -1450,7 +1761,6 @@ def recommend_enforcement_points(top_n=10, start_ts=None, end_ts=None):
             """,
             (recent_cutoff, start_ts, end_ts),
         )
-        rows = c.fetchall()
     finally:
         conn.close()
 

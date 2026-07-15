@@ -1,0 +1,885 @@
+{% extends "base.html" %}
+{% block title %}Tambah Kamera — PADI{% endblock %}
+{% block header_icon %}
+<div class="w-7 h-7 rounded-[0.4rem] flex items-center justify-center bg-blue-50 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400">
+    <i class="fas fa-video text-sm"></i>
+</div>
+{% endblock %}
+{% block header_kicker %}Kamera{% endblock %}
+{% block header_title %}Tambah Kamera External{% endblock %}
+{% block header_actions %}
+    <a href="/cameras" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/70 text-slate-700 dark:text-white rounded-lg text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-500/40 shadow-sm">
+        <i class="fas fa-arrow-left text-xs"></i>
+        <span>Kembali</span>
+    </a>
+{% endblock %}
+{% block style_extra %}
+<style>
+    .addcam-card {
+        background: #ffffff;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        border-radius: 1.1rem;
+        transition: all 0.25s;
+    }
+    .dark .addcam-card {
+        background: #0f172a;
+        border-color: #1e293b;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+    }
+    .addcam-hero {
+        background: linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(99,102,241,0.06) 100%);
+        border: 1px solid rgba(56,189,248,0.15);
+        border-radius: 1rem;
+        padding: 1.5rem;
+    }
+    .addcam-preview-wrap {
+        position: relative;
+        border-radius: 0.9rem;
+        overflow: hidden;
+        background: linear-gradient(135deg, #0b1220 0%, #1a1a2e 100%);
+        border: 1px solid rgba(255,255,255,0.06);
+    }
+    .addcam-preview-wrap img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .addcam-badge {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        padding: 3px 10px; border-radius: 9999px;
+        font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .badge-hls { background: rgba(139,92,246,0.15); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
+    .badge-snapshot { background: rgba(6,182,212,0.15); color: #67e8f9; border: 1px solid rgba(6,182,212,0.3); }
+    .badge-online { background: rgba(16,185,129,0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-error { background: rgba(220,38,38,0.15); color: #fca5a5; border: 1px solid rgba(220,38,38,0.3); }
+    .badge-loading { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+    .url-toggle-btn {
+        padding: 5px 14px; border-radius: 0.5rem;
+        font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        border: 1px solid var(--border-color);
+        transition: all 0.2s;
+        background: var(--input-surface);
+        color: var(--text-tertiary);
+    }
+    .url-toggle-btn.active {
+        background: rgba(6,182,212,0.15);
+        color: #67e8f9;
+        border-color: rgba(6,182,212,0.35);
+    }
+    .url-toggle-btn:not(.active):hover {
+        border-color: rgba(255,255,255,0.2);
+        color: var(--text-secondary);
+    }
+    .dropdown-list {
+        position: absolute; z-index: 50;
+        top: calc(100% + 4px); left: 0; right: 0;
+        background: #ffffff;
+        border: 1px solid #f1f5f9;
+        border-radius: 0.75rem;
+        max-height: 260px; overflow-y: auto;
+        display: none;
+        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+    }
+    .dark .dropdown-list {
+        background: rgba(15,23,42,0.98);
+        border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+    .dropdown-list.open { display: block; }
+    .dropdown-item {
+        padding: 0.7rem 0.85rem;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        transition: background 0.15s;
+    }
+    .dropdown-item:hover { background: rgba(6,182,212,0.1); }
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-empty { padding: 1.2rem; text-align: center; color: #475569; font-size: 0.8rem; }
+    .toast {
+        position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+        padding: 10px 18px; border-radius: 0.75rem;
+        font-size: 0.8rem; font-weight: 600;
+        transform: translateY(80px); opacity: 0;
+        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        max-width: 360px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { background: rgba(220,38,38,0.95); color: #fff; border: 1px solid rgba(248,113,113,0.3); }
+    .toast.success { background: rgba(5,150,105,0.95); color: #fff; border: 1px solid rgba(110,231,183,0.3); }
+    .spinner {
+        width: 20px; height: 20px;
+        border: 2px solid rgba(255,255,255,0.1);
+        border-top-color: rgba(6,182,212,0.8);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: inline-block;
+    }
+    .spinner-sm {
+        width: 14px; height: 14px;
+        border-width: 1.5px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeInUp 0.4s ease-out forwards; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
+
+    <!-- Hero Banner -->
+    <div class="addcam-hero fade-in">
+        <div class="flex items-start justify-between flex-wrap gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-satellite-dish text-sky-400 text-lg"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-[var(--text-primary)]">Dishub DKI Jakarta</h2>
+                    <p class="text-xs text-[var(--text-tertiary)] mt-0.5">streetside.mugnimaestra.dev — 1230+ kamera aktif</p>
+                    <div class="flex items-center gap-3 mt-2 flex-wrap">
+                        <span id="api-status" class="addcam-badge badge-loading">
+                            <div class="spinner spinner-sm" style="width:8px;height:8px;border-width:1px"></div>
+                            Loading...
+                        </span>
+                        <span id="cam-count" class="text-xs text-[var(--text-tertiary)]"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="fetchExternalCameras()" class="w-9 h-9 rounded-lg border border-[var(--border-color)] bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all" title="Refresh daftar kamera">
+                    <i class="fas fa-sync-alt text-xs"></i>
+                </button>
+                <a href="/cameras" class="sm:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--input-surface)] text-[var(--text-secondary)] text-xs font-medium hover:text-[var(--text-primary)] transition-all">
+                    <i class="fas fa-arrow-left text-[10px]"></i> Kembali
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid: Browse (left) + Form (right) -->
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+
+        <!-- LEFT: Search & Preview -->
+        <div class="xl:col-span-3 space-y-4">
+
+            <!-- Search Card -->
+            <div class="addcam-card p-4 fade-in relative z-50" style="animation-delay:0.05s; overflow:visible !important">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                        <i class="fas fa-search text-sky-400 text-[10px]"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-[var(--text-primary)]">Cari Kamera</h3>
+                </div>
+                <div class="relative">
+                    <input
+                        type="text"
+                        id="cam-search"
+                        class="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                        placeholder="Ketik nama, alamat, atau kota..."
+                        onfocus="showDropdown()"
+                        oninput="filterDropdown()"
+                        autocomplete="off"
+                    >
+                    <div id="dropdown-list" class="dropdown-list"></div>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-2">
+                    <i class="fas fa-info-circle mr-1 opacity-60"></i>
+                    Klik kamera dari daftar untuk melihat preview dan mengisi form otomatis
+                </p>
+            </div>
+
+            <!-- Map Card -->
+            <div class="addcam-card overflow-hidden fade-in" style="animation-delay:0.08s">
+                <div class="p-4 flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                            <i class="fas fa-map-marked-alt text-emerald-400 text-[10px]"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-[var(--text-primary)]">Peta Sebaran CCTV</h3>
+                            <p class="text-[11px] text-[var(--text-tertiary)]">Klik marker di peta untuk memilih kamera</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background:#10b981"></span> Terdaftar
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background:#38bdf8"></span> Stream
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background:#a855f7"></span> Snapshot
+                        </span>
+                        <span id="map-cam-count" class="text-[11px] text-[var(--text-tertiary)] font-medium"></span>
+                    </div>
+                </div>
+                <div id="cctv-map" style="height:360px;width:100%;background:#0b1220;z-index:0"></div>
+            </div>
+
+            <!-- Preview Card -->
+            <div class="addcam-card overflow-hidden fade-in" style="animation-delay:0.1s">
+                <!-- Empty State -->
+                <div id="preview-empty" class="flex flex-col items-center justify-center py-20 text-center px-6">
+                    <div class="w-20 h-20 rounded-2xl bg-slate-800/40 border border-slate-700/30 flex items-center justify-center mb-4">
+                        <i class="fas fa-camera text-3xl text-slate-600"></i>
+                    </div>
+                    <p class="text-sm font-semibold text-[var(--text-secondary)] mb-1">Belum Ada Kamera Dipilih</p>
+                    <p class="text-xs text-[var(--text-tertiary)] max-w-xs">Cari dan pilih kamera dari daftar di atas, atau ketik nama lokasi untuk memfilter hasil.</p>
+                </div>
+
+                <!-- Loaded State -->
+                <div id="preview-loaded" class="hidden">
+                    <!-- Image Preview -->
+                    <div class="addcam-preview-wrap" style="aspect-ratio:16/9">
+                        <img id="preview-img" alt="Camera Preview">
+                        <div id="preview-loading" class="absolute inset-0 hidden items-center justify-center bg-slate-900/70">
+                            <div class="spinner"></div>
+                        </div>
+                        <!-- Overlay info -->
+                        <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-white truncate" id="info-name-overlay">-</p>
+                                    <p class="text-xs text-slate-300 truncate" id="info-address-overlay">-</p>
+                                </div>
+                                <span id="info-type-overlay" class="addcam-badge badge-snapshot">-</span>
+                            </div>
+                        </div>
+                        <!-- Top-right badge -->
+                        <div class="absolute top-3 right-3">
+                            <span class="addcam-badge badge-online">
+                                <i class="fas fa-circle text-[6px] animate-pulse"></i>
+                                LIVE
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Info Grid -->
+                    <div class="p-4 space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-900/30 rounded-xl p-3 border border-white/5">
+                                <p class="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1 font-semibold">Lokasi</p>
+                                <p class="text-sm font-semibold text-[var(--text-primary)]" id="info-city">-</p>
+                            </div>
+                            <div class="bg-slate-900/30 rounded-xl p-3 border border-white/5">
+                                <p class="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1 font-semibold">Koordinat</p>
+                                <p class="text-xs font-mono text-sky-400" id="info-coords">-</p>
+                            </div>
+                        </div>
+                        <div class="bg-slate-900/30 rounded-xl p-3 border border-white/5">
+                            <p class="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1 font-semibold">URL Stream</p>
+                            <p class="text-[11px] font-mono text-[var(--text-tertiary)] break-all leading-relaxed" id="info-url">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Form -->
+        <div class="xl:col-span-2">
+            <div class="addcam-card p-5 space-y-5 sticky top-4 fade-in" style="animation-delay:0.15s">
+
+                <!-- Form Header -->
+                <div class="flex items-center gap-3 pb-4 border-b border-white/5">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-plus text-emerald-400 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-[var(--text-primary)]">Detail Kamera</h3>
+                        <p class="text-[11px] text-[var(--text-tertiary)]">Form akan terisi otomatis setelah pilih kamera</p>
+                    </div>
+                </div>
+
+                <!-- Nama Kamera -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Nama Kamera <span class="text-red-400">*</span>
+                    </label>
+                    <input type="text" id="cam-name"
+                        class="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                        placeholder="Contoh: Paseban 001 - Arah Bundaran HI">
+                </div>
+
+                <!-- URL Toggle -->
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        URL Kamera <span class="text-red-400">*</span>
+                    </label>
+                    <div class="flex gap-2 mb-2">
+                        <button type="button" id="btn-snapshot" onclick="setUrlType('snapshot')"
+                            class="url-toggle-btn active flex items-center gap-1.5">
+                            <i class="fas fa-image text-[10px]"></i> Snapshot
+                        </button>
+                        <button type="button" id="btn-stream" onclick="setUrlType('stream')"
+                            class="url-toggle-btn flex items-center gap-1.5">
+                            <i class="fas fa-broadcast-tower text-[10px]"></i> Stream
+                        </button>
+                    </div>
+                    <input type="text" id="cam-url"
+                        class="w-full px-4 py-2.5 rounded-xl text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                        placeholder="Akan terisi otomatis setelah pilih kamera...">
+                    <input type="hidden" id="cam-url-snapshot" value="">
+                    <input type="hidden" id="cam-url-stream" value="">
+                </div>
+
+                <!-- Coordinates -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Latitude</label>
+                        <input type="text" id="cam-lat"
+                            class="w-full px-4 py-2.5 rounded-xl text-sm font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                            placeholder="-6.19439">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Longitude</label>
+                        <input type="text" id="cam-lng"
+                            class="w-full px-4 py-2.5 rounded-xl text-sm font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                            placeholder="106.84945">
+                    </div>
+                </div>
+
+                <!-- Test Status -->
+                <div id="cam-status" class="hidden p-3 rounded-xl bg-slate-900/40 border border-white/5 flex items-center gap-2.5">
+                    <span class="w-2 h-2 rounded-full bg-slate-500 flex-shrink-0" id="status-dot"></span>
+                    <span id="status-text" class="text-xs text-[var(--text-tertiary)]"></span>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-2.5 pt-1">
+                    <button onclick="testCamera()" id="btn-test"
+                        class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all border border-[var(--border-color)] bg-[var(--input-surface)] hover:bg-slate-200 dark:hover:bg-slate-700 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                        <i class="fas fa-eye text-xs"></i> Test
+                    </button>
+                    <button onclick="addCamera()" id="btn-add" disabled
+                        class="flex-[2] flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+                        <i class="fas fa-plus text-xs"></i> Tambah Kamera
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+var externalCameras = [];
+var registeredCameras = [];
+var densityMap = {};
+var selectedCamera = null;
+var currentUrlType = "snapshot";
+var cctvMap = null;
+var cctvTileLayer = null;
+var cctvMarkerLayer = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function() {
+    loadLeaflet();
+    fetchExternalCameras();
+    fetchRegisteredCameras();
+    document.addEventListener("click", function(e) {
+        var dd = document.getElementById("dropdown-list");
+        var searchInput = document.getElementById("cam-search");
+        if (dd && dd.classList.contains("open") &&
+            !dd.contains(e.target) && !searchInput.contains(e.target)) {
+            dd.classList.remove("open");
+        }
+    });
+    // Re-tint map tiles when theme toggles
+    window.addEventListener("themechanged", function() {
+        if (cctvMap && cctvTileLayer) {
+            cctvMap.removeLayer(cctvTileLayer);
+            cctvTileLayer = L.tileLayer(mapTileUrl(), { attribution: "© CARTO", maxZoom: 18 }).addTo(cctvMap);
+        }
+    });
+});
+
+// ── Leaflet Map ────────────────────────────────────────────────────────────────
+function mapIsDark() {
+    return document.documentElement.classList.contains("dark");
+}
+
+function mapTileUrl() {
+    return mapIsDark()
+        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+}
+
+function loadLeaflet() {
+    if (typeof L !== "undefined") { initCctvMap(); return; }
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9/dist/leaflet.css";
+    document.head.appendChild(css);
+
+    var js = document.createElement("script");
+    js.src = "https://unpkg.com/leaflet@1.9/dist/leaflet.js";
+    js.onload = function() { initCctvMap(); };
+    document.head.appendChild(js);
+}
+
+function initCctvMap() {
+    var el = document.getElementById("cctv-map");
+    if (!el || typeof L === "undefined" || cctvMap) return;
+    cctvMap = L.map(el, { scrollWheelZoom: true }).setView([-6.2146, 106.8020], 11);
+    cctvTileLayer = L.tileLayer(mapTileUrl(), { attribution: "© CARTO", maxZoom: 18 }).addTo(cctvMap);
+    cctvMarkerLayer = L.layerGroup().addTo(cctvMap);
+    // Ensure tiles/markers lay out correctly after container is sized
+    setTimeout(function() { if (cctvMap) cctvMap.invalidateSize(); }, 200);
+    renderMapMarkers();
+}
+
+function makeCamIcon(color, pulse) {
+    var pulseRing = pulse
+        ? '<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ' + color + ';opacity:0.4;animation:spin 1.5s infinite"></div>'
+        : '';
+    return L.divIcon({
+        html: '<div style="position:relative;width:34px;height:34px">' + pulseRing +
+              '<div style="position:absolute;inset:3px;background:' + color + ';border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.35);box-shadow:0 4px 12px ' + color + '66"><i class="fas fa-video" style="color:#fff;font-size:11px"></i></div></div>',
+        className: "", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -19],
+    });
+}
+
+function renderMapMarkers() {
+    if (!cctvMap || !cctvMarkerLayer || typeof L === "undefined") return;
+    cctvMarkerLayer.clearLayers();
+
+    var bounds = [];
+    var regBounds = [];
+
+    // ── Registered cameras (from /api/sources) ──
+    var regPlotted = 0;
+    registeredCameras.forEach(function(cam) {
+        var lat = parseFloat(cam.lat);
+        var lng = parseFloat(cam.lng);
+        if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return;
+
+        var den = densityMap[cam.id] || {};
+        var density = den.density || { level: "lancar", label: "Lancar", color: "#10b981", score: 1 };
+        var count = den.current_count || 0;
+        var isPulse = density.score >= 3;
+        var marker = L.marker([lat, lng], { icon: makeCamIcon(density.color, isPulse) });
+
+        var statusLabel = cam.active ? "Aktif" : "Nonaktif";
+        var popupHtml =
+            '<div style="min-width:190px">' +
+            '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + escHtml(cam.name || cam.id) + '</div>' +
+            '<div style="margin-bottom:6px">' +
+            '<span style="background:' + density.color + '22;color:' + density.color + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;border:1px solid ' + density.color + '44">' + density.label + '</span>' +
+            '<span style="margin-left:8px;color:#94a3b8;font-size:11px">' + count + ' kendaraan</span>' +
+            '</div>' +
+            '<div style="border-radius:8px;overflow:hidden;background:#0b1220;margin-bottom:6px"><img src="/api/snapshot/' + escHtml(cam.id) + '?t=' + Date.now() + '" alt="" style="width:100%;display:block" onerror="this.style.display=\'none\'"></div>' +
+            '<div style="font-size:10px;color:#94a3b8;font-family:monospace"><i class="fas fa-map-pin"></i> ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</div>' +
+            '<div style="font-size:10px;color:#10b981;font-weight:600;margin-top:3px">Terdaftar · ' + statusLabel + '</div>' +
+            '</div>';
+        marker.bindPopup(popupHtml, { maxWidth: 260 });
+        marker.on("click", function() { marker.openPopup(); });
+        marker.addTo(cctvMarkerLayer);
+        bounds.push([lat, lng]);
+        regBounds.push([lat, lng]);
+        regPlotted++;
+    });
+
+    // ── External cameras (from API) ──
+    var extPlotted = 0;
+    externalCameras.forEach(function(cam, idx) {
+        var lat = parseFloat(cam.lat);
+        var lng = parseFloat(cam.lng);
+        if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return;
+
+        var isStream = cam.hls_url && cam.hls_url.includes(".m3u8");
+        var color = isStream ? "#38bdf8" : "#a855f7";
+        var marker = L.circleMarker([lat, lng], {
+            radius: 6, color: color, weight: 2,
+            fillColor: color, fillOpacity: 0.55,
+        });
+
+        var typeLabel = isStream ? "HLS Stream" : "Snapshot";
+        var popupHtml =
+            '<div style="min-width:180px">' +
+            '<div style="font-weight:700;font-size:13px;margin-bottom:2px">' + escHtml(cam.name) + '</div>' +
+            (cam.city ? '<div style="font-size:11px;color:#64748b;margin-bottom:2px">' + escHtml(cam.city) + '</div>' : '') +
+            '<div style="font-size:10px;color:#94a3b8;font-family:monospace;margin-bottom:6px">' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</div>' +
+            '<span style="display:inline-block;font-size:10px;font-weight:600;color:' + color + '">' + typeLabel + '</span><br>' +
+            '<button onclick="selectCameraByIndex(' + idx + ')" style="margin-top:6px;width:100%;padding:5px 8px;border-radius:6px;border:none;background:#059669;color:#fff;font-size:11px;font-weight:600;cursor:pointer">Pilih Kamera Ini</button>' +
+            '</div>';
+        marker.bindPopup(popupHtml);
+        marker.on("click", function() { marker.openPopup(); });
+        marker.addTo(cctvMarkerLayer);
+        bounds.push([lat, lng]);
+        extPlotted++;
+    });
+
+    var countEl = document.getElementById("map-cam-count");
+    if (countEl) countEl.textContent = (regPlotted + extPlotted) + " titik di peta (" + regPlotted + " terdaftar)";
+
+    // Prioritaskan fokus ke kamera terdaftar; kalau belum ada, baru pakai semua titik
+    var focusBounds = regBounds.length > 0 ? regBounds : bounds;
+    if (focusBounds.length === 1) {
+        try { cctvMap.setView(focusBounds[0], 15); } catch (e) {}
+    } else if (focusBounds.length > 1) {
+        try { cctvMap.fitBounds(focusBounds, { padding: [40, 40], maxZoom: 14 }); } catch (e) {}
+    }
+}
+
+function focusMapOnCamera(cam) {
+    if (!cctvMap || !cam) return;
+    var lat = parseFloat(cam.lat);
+    var lng = parseFloat(cam.lng);
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    cctvMap.setView([lat, lng], 15, { animate: true });
+}
+
+// ── Fetch Registered Cameras ──────────────────────────────────────────────────
+async function fetchRegisteredCameras() {
+    try {
+        var results = await Promise.all([
+            fetch("/api/sources"),
+            fetch("/api/density")
+        ]);
+        var srcRes = results[0];
+        var denRes = results[1];
+
+        registeredCameras = srcRes.ok ? (await srcRes.json() || []) : [];
+
+        densityMap = {};
+        if (denRes.ok) {
+            var denData = await denRes.json();
+            if (denData && denData.status === "success") {
+                (denData.cameras || []).forEach(function(c) { densityMap[c.camera_id] = c; });
+            }
+        }
+        renderMapMarkers();
+    } catch (e) {
+        console.error("[fetchRegisteredCameras]", e);
+    }
+}
+
+// ── Fetch External Cameras ────────────────────────────────────────────────────
+async function fetchExternalCameras() {
+    var statusEl = document.getElementById("api-status");
+    var countEl = document.getElementById("cam-count");
+    statusEl.className = "addcam-badge badge-loading";
+    statusEl.innerHTML = '<div class="spinner spinner-sm" style="width:8px;height:8px;border-width:1px"></div> Menghubungi API...';
+
+    try {
+        var res = await fetch("/api/external_cameras");
+        if (!res.ok) {
+            var errData = await res.json().catch(function() { return {}; });
+            throw new Error(errData.message || ("HTTP " + res.status));
+        }
+        var data = await res.json();
+
+        var rawCams = data.cameras || [];
+        externalCameras = rawCams.map(function(c) {
+            if (c.content_type && c.content_type !== "cctv") return null;
+            var props = (c && c.properties) ? c.properties : c;
+            var coords = (c && c.geometry && c.geometry.coordinates) ? c.geometry.coordinates : [];
+            var baseUrl = window.EXTERNAL_BASE_URL || "https://compe.f-mc.my.id/hlsproxy";
+            var imgPath = props.snapshot_url || props.image1 || "";
+            var snapshotUrl = "";
+            if (imgPath) {
+                snapshotUrl = imgPath.startsWith("http") ? imgPath : baseUrl + imgPath;
+            }
+            var hlsUrl = props.hls_url || "";
+            if (!hlsUrl && imgPath && imgPath.includes("/img/a/")) {
+                try {
+                    var parts2 = imgPath.split("/img/a/");
+                    if (parts2.length > 1) {
+                        var rest2 = parts2[1];
+                        var camName2 = rest2.split("/")[0];
+                        var tokenParts = rest2.split("?token=");
+                        var token = tokenParts.length > 1 ? tokenParts[1] : "";
+                        hlsUrl = baseUrl + "/stream/a/" + camName2 + "/video.m3u8?token=" + token;
+                    }
+                } catch(e) {}
+            }
+            var camType = "snapshot";
+            if (hlsUrl && hlsUrl.includes(".m3u8")) {
+                camType = "stream";
+            }
+            return {
+                name: props.name || props.cctv_name || "Camera " + (props.external_id || props.id || ""),
+                city: props.city || props.city_name || "",
+                address: props.address || "",
+                lat: coords[1] || props.latitude || null,
+                lng: coords[0] || props.longitude || null,
+                url: snapshotUrl,
+                stream_url: hlsUrl || snapshotUrl,
+                hls_url: hlsUrl,
+                external_id: props.external_id || props.id || "",
+                type: camType,
+            };
+        }).filter(function(c) { return c !== null && c.url; });
+
+        var total = externalCameras.length;
+        statusEl.className = "addcam-badge badge-online";
+        statusEl.innerHTML = '<i class="fas fa-check-circle text-[9px]"></i> Online';
+        countEl.textContent = total + " kamera tersedia";
+
+        renderDropdown();
+        renderMapMarkers();
+    } catch(e) {
+        statusEl.className = "addcam-badge badge-error";
+        statusEl.innerHTML = '<i class="fas fa-times-circle text-[9px]"></i> Error';
+        countEl.textContent = "";
+        console.error("[fetchExternalCameras]", e);
+    }
+}
+
+// ── Dropdown ──────────────────────────────────────────────────────────────────
+function renderDropdown() {
+    var list = document.getElementById("dropdown-list");
+    var searchInput = document.getElementById("cam-search");
+    var query = (searchInput || {}).value || "";
+    var filtered = externalCameras.filter(function(c) {
+        return !query ||
+            c.name.toLowerCase().includes(query.toLowerCase()) ||
+            c.city.toLowerCase().includes(query.toLowerCase()) ||
+            c.address.toLowerCase().includes(query.toLowerCase());
+    });
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="dropdown-empty"><i class="fas fa-search text-slate-400 mr-1.5"></i> Tidak ada hasil untuk "' + escHtml(query) + '"</div>';
+        list.classList.add("open");
+        return;
+    }
+
+    var html = filtered.slice(0, 25).map(function(c) {
+        var typeIcon = c.hls_url
+            ? '<i class="fas fa-broadcast-tower text-sky-500 text-[9px] mr-1.5"></i>'
+            : '<i class="fas fa-image text-purple-500 text-[9px] mr-1.5"></i>';
+        var cityLabel = c.city ? '<span class="inline-block px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-semibold mr-1.5">' + escHtml(c.city) + '</span>' : '';
+        return '<div class="dropdown-item" onclick="selectCameraByIndex(' + externalCameras.indexOf(c) + ')">' +
+            '<div class="flex items-center gap-2 mb-0.5">' +
+            typeIcon +
+            '<span class="text-sm font-semibold text-slate-800 dark:text-slate-200">' + escHtml(c.name) + '</span>' +
+            '</div>' +
+            '<div class="text-xs text-slate-500 pl-5">' + cityLabel + escHtml(c.address || "").substring(0, 55) + '</div>' +
+            '</div>';
+    }).join("");
+
+    if (filtered.length > 25) {
+        html += '<div class="dropdown-empty text-slate-500 text-xs">+' + (filtered.length - 25) + ' hasil lainnya — silakan ketik lebih spesifik</div>';
+    }
+    list.innerHTML = html;
+    list.classList.add("open");
+}
+
+function showDropdown() { renderDropdown(); }
+function filterDropdown() { renderDropdown(); }
+
+function selectCameraByIndex(idx) {
+    if (idx < 0 || idx >= externalCameras.length) return;
+    var cam = externalCameras[idx];
+    selectedCamera = cam;
+
+    // Fill form
+    document.getElementById("cam-search").value = cam.name;
+    document.getElementById("cam-name").value = cam.name;
+    document.getElementById("cam-url-snapshot").value = cam.url || "";
+    document.getElementById("cam-url-stream").value = cam.stream_url || cam.url || "";
+
+    if (cam.hls_url && cam.hls_url.includes(".m3u8")) {
+        setUrlType("stream");
+    } else {
+        setUrlType("snapshot");
+    }
+
+    document.getElementById("cam-lat").value = cam.lat || "";
+    document.getElementById("cam-lng").value = cam.lng || "";
+    document.getElementById("dropdown-list").classList.remove("open");
+
+    // Pan map to selected camera
+    focusMapOnCamera(cam);
+
+    // Show preview
+    var emptyEl = document.getElementById("preview-empty");
+    var loadedEl = document.getElementById("preview-loaded");
+    emptyEl.classList.add("hidden");
+    loadedEl.classList.remove("hidden");
+
+    document.getElementById("info-name-overlay").textContent = cam.name;
+    document.getElementById("info-address-overlay").textContent = cam.address || "-";
+    document.getElementById("info-city").textContent = cam.city || "-";
+    document.getElementById("info-coords").textContent = (cam.lat && cam.lng) ? cam.lat.toFixed(5) + ", " + cam.lng.toFixed(5) : "-";
+    document.getElementById("info-url").textContent = (cam.hls_url || cam.url) || "-";
+
+    var isStream = cam.hls_url && cam.hls_url.includes(".m3u8");
+    var typeBadge = isStream
+        ? '<i class="fas fa-broadcast-tower text-[9px]"></i> HLS Stream'
+        : '<i class="fas fa-image text-[9px]"></i> Snapshot';
+    var badgeClass = isStream ? "badge-hls" : "badge-snapshot";
+    var typeOverlay = document.getElementById("info-type-overlay");
+    typeOverlay.className = "addcam-badge " + badgeClass;
+    typeOverlay.innerHTML = typeBadge;
+
+    // Load image
+    var previewImg = document.getElementById("preview-img");
+    var previewLoading = document.getElementById("preview-loading");
+    if (cam.url) {
+        previewImg.classList.add("hidden");
+        previewLoading.classList.remove("hidden");
+        previewLoading.classList.add("flex");
+        previewImg.onload = function() {
+            previewLoading.classList.add("hidden");
+            previewLoading.classList.remove("flex");
+            previewImg.classList.remove("hidden");
+        };
+        previewImg.onerror = function() {
+            previewLoading.classList.add("hidden");
+            previewLoading.classList.remove("flex");
+            previewImg.src = "";
+            previewImg.alt = "Gagal memuat preview";
+        };
+        var ts = Date.now();
+        previewImg.src = cam.url + (cam.url.includes("?") ? "&cb=" : "?cb=") + ts;
+    }
+
+    // Enable add button
+    document.getElementById("btn-add").disabled = false;
+}
+
+// ── URL Type Toggle ────────────────────────────────────────────────────────────
+function setUrlType(type) {
+    currentUrlType = type;
+    var snapBtn = document.getElementById("btn-snapshot");
+    var streamBtn = document.getElementById("btn-stream");
+    var urlInput = document.getElementById("cam-url");
+
+    if (type === "snapshot") {
+        snapBtn.className = "url-toggle-btn active flex items-center gap-1.5";
+        streamBtn.className = "url-toggle-btn flex items-center gap-1.5";
+        urlInput.value = document.getElementById("cam-url-snapshot").value;
+    } else {
+        snapBtn.className = "url-toggle-btn flex items-center gap-1.5";
+        streamBtn.className = "url-toggle-btn active flex items-center gap-1.5";
+        urlInput.value = document.getElementById("cam-url-stream").value;
+    }
+}
+
+// ── Test Camera ────────────────────────────────────────────────────────────────
+async function testCamera() {
+    var url = document.getElementById("cam-url").value.trim();
+    var statusEl = document.getElementById("cam-status");
+    var dotEl = document.getElementById("status-dot");
+    var textEl = document.getElementById("status-text");
+
+    if (!url) { showToast("URL kamera harus diisi dulu", "error"); return; }
+
+    statusEl.classList.remove("hidden");
+    dotEl.style.background = "#f59e0b";
+    textEl.textContent = "Menguji koneksi...";
+
+    var isImg = url.includes(".jpg") || url.includes(".jpeg") || url.includes(".png");
+    var isStream = url.includes(".m3u8");
+
+    if (isImg) {
+        var img = new Image();
+        var timeout = setTimeout(function() {
+            dotEl.style.background = "#ef4444";
+            textEl.textContent = "Timeout — gambar tidak bisa dimuat (8 detik)";
+            img.src = "";
+        }, 8000);
+        img.onload = function() {
+            clearTimeout(timeout);
+            dotEl.style.background = "#10b981";
+            textEl.textContent = "Gambar berhasil dimuat (" + Math.round(img.width) + "x" + Math.round(img.height) + ")";
+            showToast("Koneksi berhasil!", "success");
+        };
+        img.onerror = function() {
+            clearTimeout(timeout);
+            dotEl.style.background = "#ef4444";
+            textEl.textContent = "Gagal memuat gambar — URL mungkin salah atau terblokir";
+            showToast("Gagal memuat gambar", "error");
+        };
+        img.src = url + (url.includes("?") ? "&t=" : "?t=") + Date.now();
+    } else if (isStream) {
+        dotEl.style.background = "#10b981";
+        textEl.textContent = "HLS stream aktif — akan diputar saat monitoring";
+        showToast("Stream valid!", "success");
+    } else {
+        dotEl.style.background = "#10b981";
+        textEl.textContent = "URL tercatat — stream diuji saat monitoring aktif";
+        showToast("URL tercatat!", "success");
+    }
+}
+
+// ── Add Camera ────────────────────────────────────────────────────────────────
+async function addCamera() {
+    var name = document.getElementById("cam-name").value.trim();
+    var url = document.getElementById("cam-url").value.trim();
+    var lat = parseFloat(document.getElementById("cam-lat").value) || null;
+    var lng = parseFloat(document.getElementById("cam-lng").value) || null;
+    var externalId = selectedCamera ? (selectedCamera.external_id || "") : "";
+    var btn = document.getElementById("btn-add");
+
+    if (!name || !url) { showToast("Nama dan URL harus diisi", "error"); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner spinner-sm"></div> Menambah...';
+
+    try {
+        var csrfRes = await fetch("/api/csrf_token");
+        var csrfData = await csrfRes.json();
+
+        var res = await fetch("/api/add_camera", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": csrfData.csrf_token || ""
+            },
+            body: JSON.stringify({ name: name, url: url, lat: lat, lng: lng, external_id: externalId }),
+        });
+
+        var result = await res.json();
+        if (result.status === "success") {
+            showToast("Kamera '" + name + "' berhasil ditambahkan!", "success");
+            // Reset form
+            document.getElementById("cam-search").value = "";
+            document.getElementById("cam-name").value = "";
+            document.getElementById("cam-url").value = "";
+            document.getElementById("cam-url-snapshot").value = "";
+            document.getElementById("cam-url-stream").value = "";
+            document.getElementById("cam-lat").value = "";
+            document.getElementById("cam-lng").value = "";
+            document.getElementById("preview-empty").classList.remove("hidden");
+            document.getElementById("preview-loaded").classList.add("hidden");
+            document.getElementById("cam-status").classList.add("hidden");
+            document.getElementById("btn-add").disabled = true;
+            setUrlType("snapshot");
+            selectedCamera = null;
+        } else {
+            showToast(result.message || "Gagal menambahkan kamera", "error");
+        }
+    } catch(e) {
+        showToast("Error: " + (e.message || "Unknown"), "error");
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-plus text-xs"></i> Tambah Kamera';
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function escHtml(str) {
+    if (str === null || str === undefined) return "";
+    var d = document.createElement("div");
+    d.textContent = String(str);
+    return d.innerHTML;
+}
+
+function showToast(msg, type) {
+    var el = document.getElementById("toast");
+    el.className = "toast " + type;
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(function() { el.classList.remove("show"); }, 3500);
+}
+</script>
+{% endblock %}

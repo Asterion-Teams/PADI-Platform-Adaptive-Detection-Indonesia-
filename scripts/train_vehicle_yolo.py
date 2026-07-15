@@ -53,6 +53,15 @@ PRESETS = {
         "batch": 16,
         "patience": 20,
     },
+    # YOLO11m fine-tune preset — recommended for competition
+    # Best balance of accuracy vs speed for real-time CCTV processing
+    "yolo11m": {
+        "model": "yolo11m.pt",
+        "epochs": 30,
+        "imgsz": 640,
+        "batch": 4,
+        "patience": 10,
+    },
 }
 
 
@@ -138,14 +147,22 @@ def main():
         verbose=True,
     )
 
-    # Copy best.pt to a stable path so the app can auto-detect it.
+    # Copy best.pt to stable paths so the app can auto-detect it.
     best_src = os.path.join(runs_dir, "train", args.name, "weights", "best.pt")
+
+    # Primary: YOLO11m fine-tuned path (main model for competition)
+    stable_ft_dst = os.path.join(REPO_ROOT, "models", "vehicle_v3_yolo11m_best.pt")
+    # Legacy: backward compatibility path
     stable_dst = os.path.join(REPO_ROOT, "models", "vehicle_v3_best.pt")
+
     if os.path.isfile(best_src):
+        shutil.copy2(best_src, stable_ft_dst)
         shutil.copy2(best_src, stable_dst)
-        size_mb = os.path.getsize(stable_dst) / 1024 / 1024
+        size_mb = os.path.getsize(stable_ft_dst) / 1024 / 1024
+        model_size_mb = size_mb
         print(f"\n[OK] Training done. Best weights copied to:")
-        print(f"     {stable_dst}  ({size_mb:.1f} MB)")
+        print(f"     {stable_ft_dst}  ({model_size_mb:.1f} MB)")
+        print(f"     {stable_dst}  ({model_size_mb:.1f} MB)")
         print(f"     Source: {best_src}")
         print(f"\nThe Flask app will auto-pick this up on next startup.")
     else:

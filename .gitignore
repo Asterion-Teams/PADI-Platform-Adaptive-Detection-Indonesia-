@@ -28,9 +28,25 @@ models/*.pt
 models/*.onnx
 logs/
 
+# Secrets / Environment
+.env
+.env.*
+!.env.example
+
 # System
 .DS_Store
 
 # IDE
 .vscode/
 .idea/
+
+# Node
+node_modules/
+
+# Large model at repo root
+yolo11l.pt
+
+# Local utility scripts
+write_settings.py
+check_db.py
+saranaji.txt

@@ -3,32 +3,145 @@
 {% block header_kicker %}System{% endblock %}
 {% block header_title %}Settings & Configuration{% endblock %}
 {% block header_actions %}
-    <button id="btn-save" class="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all border border-emerald-500">
+    <button id="btn-save" class="hidden sm:flex items-center gap-2 px-5 py-2.5 btn-primary rounded-xl text-sm font-semibold border-transparent">
         <i class="fas fa-save"></i>
         <span>Simpan</span>
     </button>
-    <button id="btn-restart" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-800/40 hover:bg-slate-800/70 text-white rounded-lg text-sm font-semibold transition-all border border-slate-700 hover:border-amber-500/40">
-        <i class="fas fa-rotate text-amber-300"></i>
+    <button id="btn-restart" class="hidden sm:flex items-center gap-2 px-4 py-2.5 btn-secondary rounded-xl text-sm font-semibold">
+        <i class="fas fa-rotate text-amber-500 dark:text-amber-300"></i>
         <span>Restart Agents</span>
     </button>
 {% endblock %}
 {% block style_extra %}
 <style>
-    .setting-card { background: rgba(15,23,42,0.58); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.07); border-radius: 1rem; padding: 1.25rem; }
-    .setting-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem; display: block; }
-    .setting-desc { font-size: 0.7rem; color: #64748b; margin-top: 0.2rem; }
-    .input-field { background: rgba(2,6,23,0.55); border: 1px solid rgba(255,255,255,0.10); color: #e2e8f0; padding: 0.5rem 0.75rem; border-radius: 0.5rem; width: 100%; font-size: 0.875rem; transition: all 0.2s; }
-    .input-field:focus { outline: none; border-color: rgba(56,189,248,0.45); box-shadow: 0 0 0 3px rgba(56,189,248,0.12); }
-    .toggle { position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: all 0.3s; flex-shrink: 0; }
-    .toggle.on { background: #10b981; }
-    .toggle.off { background: #475569; }
-    .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: white; transition: all 0.3s; }
+    .setting-card { 
+        background: rgba(255, 255, 255, 0.95); 
+        border: 1px solid rgba(0, 0, 0, 0.06); 
+        border-radius: 1.25rem; 
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        transition: all 0.3s ease;
+    }
+    .dark .setting-card {
+        background: rgba(15,23,42,0.6);
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .setting-label { font-size: 0.825rem; font-weight: 600; color: #475569; margin-bottom: 0.375rem; display: block; }
+    .dark .setting-label { color: #cbd5e1; }
+    .setting-desc { font-size: 0.75rem; color: #64748b; margin-top: 0.375rem; line-height: 1.4; }
+    .dark .setting-desc { color: #94a3b8; }
+    
+    .input-field { 
+        background: #f8fafc; 
+        border: 1px solid #e2e8f0; 
+        color: #0f172a; 
+        padding: 0.5rem 0.875rem; 
+        border-radius: 0.75rem; 
+        width: 100%; 
+        font-size: 0.875rem; 
+        transition: all 0.2s ease;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+    .dark .input-field { 
+        background: rgba(2,6,23,0.55); 
+        border: 1px solid rgba(255,255,255,0.12); 
+        color: #e2e8f0; 
+    }
+    .input-field:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 4px rgba(56,189,248,0.15); }
+    
+    .toggle { position: relative; width: 44px; height: 24px; border-radius: 9999px; cursor: pointer; transition: background-color 0.3s ease; flex-shrink: 0; border: 2px solid transparent; }
+    .toggle.on { background-color: #10b981; }
+    .toggle.off { background-color: #cbd5e1; }
+    .dark .toggle.off { background-color: #475569; }
+    .toggle::after { content: ''; position: absolute; top: 1px; left: 1px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     .toggle.on::after { transform: translateX(20px); }
-    .model-card { border: 1px solid rgba(255,255,255,0.07); border-radius: 0.75rem; padding: 0.75rem 1rem; cursor: pointer; transition: all 0.2s; }
-    .model-card:hover { border-color: rgba(56,189,248,0.3); background: rgba(56,189,248,0.05); }
-    .model-card.active { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.08); }
-    .section-title { font-size: 0.85rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-    .toast-bar { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 9999; }
+    
+    .model-card { 
+        border: 1px solid #e2e8f0; 
+        border-radius: 1rem; 
+        padding: 1rem 1.25rem; 
+        cursor: pointer; 
+        transition: all 0.25s ease;
+        background: #ffffff;
+    }
+    .dark .model-card {
+        border-color: rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.02);
+    }
+    .model-card:hover { border-color: #38bdf8; background: #f0f9ff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(56,189,248,0.1); }
+    .dark .model-card:hover { background: rgba(56,189,248,0.08); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .model-card.active { border-color: #10b981; background: #ecfdf5; box-shadow: 0 4px 12px rgba(16,185,129,0.15); }
+    .dark .model-card.active { border-color: #10b981; background: rgba(16,185,129,0.1); }
+
+    .ai-mode-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 1rem 1.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: #ffffff;
+        text-align: left;
+    }
+    .dark .ai-mode-card { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
+    .ai-mode-card:hover { border-color: #8b5cf6; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139,92,246,0.12); }
+    .ai-mode-card.active { border-color: #8b5cf6; background: #f5f3ff; box-shadow: 0 4px 12px rgba(139,92,246,0.18); }
+    .dark .ai-mode-card.active { border-color: #8b5cf6; background: rgba(139,92,246,0.12); }
+    .ai-mode-card .text-sm { color: #0f172a; }
+    .dark .ai-mode-card .text-sm { color: #f1f5f9; }
+    
+    .section-title { font-size: 1rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.625rem; margin-bottom: 1.25rem; }
+    .dark .section-title { color: #f8fafc; }
+    .toast-bar { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); z-index: 9999; }
+    
+    /* FlyonUI style range slider */
+    input[type=range] {
+        -webkit-appearance: none;
+        width: 100%;
+        background: transparent;
+    }
+    input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 18px;
+        width: 18px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 2px solid #38bdf8;
+        cursor: pointer;
+        margin-top: -7px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.1s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+    input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 6px;
+        cursor: pointer;
+        background: #e2e8f0;
+        border-radius: 9999px;
+    }
+    .dark input[type=range]::-webkit-slider-runnable-track { background: #334155; }
+    
+    /* Primary & Secondary Buttons */
+    .btn-primary {
+        background-color: #10b981;
+        color: white;
+        transition: all 0.2s ease;
+    }
+    .btn-primary:hover { background-color: #059669; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.25); }
+    .btn-secondary {
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        transition: all 0.2s ease;
+    }
+    .dark .btn-secondary {
+        background-color: rgba(30,41,59,0.5);
+        color: #e2e8f0;
+        border-color: rgba(255,255,255,0.1);
+    }
+    .btn-secondary:hover { background-color: #e2e8f0; color: #0f172a; }
+    .dark .btn-secondary:hover { background-color: rgba(30,41,59,0.8); color: #ffffff; }
 </style>
 {% endblock %}
 
@@ -36,15 +149,15 @@
 <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
 
     <!-- System Status -->
-    <div class="glass-panel p-3 flex flex-wrap items-center gap-4">
-        <div class="flex items-center gap-2">
-            <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span class="text-sm text-slate-300" id="sys-status">System Online</span>
+    <div class="setting-card p-4 flex flex-wrap items-center gap-5">
+        <div class="flex items-center gap-3">
+            <span class="inline-flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+            <span class="text-sm font-bold text-slate-800 dark:text-slate-200 tracking-tight" id="sys-status">System Online</span>
         </div>
-        <div class="flex items-center gap-4 ml-auto text-xs text-slate-500">
-            <span id="sys-gpu">—</span>
-            <span id="sys-model">—</span>
-            <span id="sys-agents">—</span>
+        <div class="flex items-center gap-6 ml-auto text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span class="flex items-center gap-1.5"><i class="fas fa-microchip text-slate-400"></i> <span id="sys-gpu">—</span></span>
+            <span class="flex items-center gap-1.5"><i class="fas fa-cube text-slate-400"></i> <span id="sys-model">—</span></span>
+            <span class="flex items-center gap-1.5"><i class="fas fa-robot text-slate-400"></i> <span id="sys-agents">—</span></span>
         </div>
     </div>
 
@@ -52,14 +165,128 @@
 
         <!-- AI Model -->
         <div class="setting-card lg:col-span-2">
-            <h3 class="section-title"><i class="fas fa-brain text-purple-400"></i> AI Model <span class="ml-auto text-xs text-slate-500 font-normal" id="current-model-label">—</span></h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="model-grid"></div>
-            <p class="setting-desc mt-3">Klik model untuk switch. Hot-swap tanpa restart server.</p>
+            <h3 class="section-title"><i class="fas fa-brain text-indigo-500"></i> AI Model (YOLO Deteksi) <span class="ml-auto text-xs text-slate-400 font-medium" id="current-model-label">—</span></h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 mt-2" id="model-grid"></div>
+            <p class="setting-desc mt-4"><i class="fas fa-info-circle mr-1"></i>Klik model untuk switch. Hot-swap tanpa restart server.</p>
+        </div>
+
+        <!-- AI Engine (LLM Provider) -->
+        <div class="setting-card lg:col-span-2">
+            <h3 class="section-title">
+                <i class="fas fa-microchip text-purple-500"></i> AI Engine (LLM)
+                <span id="ai-active-badge" class="ml-auto text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">—</span>
+            </h3>
+            <p class="setting-desc mb-3">Sumber AI untuk chat, koreksi plat (ANPR), dan identifikasi kendaraan. Pilih <strong>Ollama Lokal</strong> agar gratis &amp; tanpa kirim data ke cloud, atau <strong>Matikan</strong> untuk hemat token sepenuhnya.</p>
+
+            <!-- Mode selector -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button type="button" class="ai-mode-card" data-ai-mode="ollama">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-house-laptop text-emerald-500"></i>
+                        <span class="text-sm font-semibold">Ollama Lokal</span>
+                        <span id="ai-ollama-dot" class="ml-auto inline-flex h-2 w-2 rounded-full bg-slate-300"></span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Gratis, jalan di komputer ini. Butuh Ollama running.</p>
+                </button>
+                <button type="button" class="ai-mode-card" data-ai-mode="sumopod">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-cloud text-sky-500"></i>
+                        <span class="text-sm font-semibold">SumoPod Cloud</span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">API cloud (berbayar/token). Butuh API key.</p>
+                </button>
+                <button type="button" class="ai-mode-card" data-ai-mode="off">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-power-off text-rose-500"></i>
+                        <span class="text-sm font-semibold">Matikan AI</span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Nonaktifkan semua AI. Sistem pakai OCR lokal saja.</p>
+                </button>
+            </div>
+
+            <!-- Ollama config -->
+            <div id="ai-ollama-config" class="mt-4 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="setting-label">Model Ollama</label>
+                        <select id="ai-ollama-model" class="input-field">
+                            <option value="">— memuat model lokal —</option>
+                        </select>
+                        <p class="setting-desc" id="ai-ollama-hint">Daftar model yang terpasang di Ollama lokal.</p>
+                    </div>
+                    <div>
+                        <label class="setting-label">Ollama URL</label>
+                        <input id="ai-ollama-url" class="input-field" value="http://localhost:11434" readonly>
+                        <p class="setting-desc">Diatur via env <code class="text-xs">OLLAMA_URL</code>.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SumoPod config -->
+            <div id="ai-sumopod-config" class="mt-4 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="setting-label">Base URL</label>
+                        <input id="ai-base-url" class="input-field" placeholder="https://ai.sumopod.com/v1">
+                    </div>
+                    <div>
+                        <label class="setting-label">Model</label>
+                        <input id="ai-model" class="input-field" placeholder="gemini/gemini-2.5-flash-lite">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="setting-label">API Key</label>
+                        <input id="ai-api-key" type="password" class="input-field" placeholder="sk-••••••  (kosongkan jika tidak ingin mengubah)">
+                        <p class="setting-desc" id="ai-key-status">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature toggles -->
+            <div id="ai-feature-toggles" class="mt-4 space-y-3 border-t border-slate-200 dark:border-slate-700/60 pt-4">
+                <div class="flex items-center justify-between">
+                    <div><div class="text-sm text-slate-700 dark:text-slate-200">AI untuk ANPR</div><p class="setting-desc">Koreksi plat nomor pakai AI.</p></div>
+                    <div id="t-ai-anpr" class="toggle off"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div><div class="text-sm text-slate-700 dark:text-slate-200">AI untuk Chat Asisten</div><p class="setting-desc">Jawaban chat pakai AI.</p></div>
+                    <div id="t-ai-chat" class="toggle off"></div>
+                </div>
+            </div>
+
+            <!-- Vehicle Identity Agent (AI token consumer) -->
+            <div class="mt-4 border-t border-slate-200 dark:border-slate-700/60 pt-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-amber-500"></i>
+                        <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Vehicle Identity Agent</span>
+                        <span id="va-status" class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">—</span>
+                    </div>
+                    <div class="flex items-center gap-2 ml-auto">
+                        <button id="btn-va-pause" class="px-3.5 py-2 btn-secondary rounded-xl text-xs font-semibold">
+                            <i class="fas fa-pause text-amber-500 mr-1"></i> Pause
+                        </button>
+                        <button id="btn-va-resume" class="px-3.5 py-2 btn-secondary rounded-xl text-xs font-semibold">
+                            <i class="fas fa-play text-emerald-500 mr-1"></i> Resume
+                        </button>
+                    </div>
+                </div>
+                <p class="setting-desc mt-2">Agent background yang mengisi merek/warna/plat kendaraan dari gambar bukti pakai AI vision. Saat <strong>Pause</strong>, agent tidak memanggil AI (hemat token).</p>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <button id="btn-ai-save" class="px-5 py-2.5 btn-primary rounded-xl text-sm font-semibold border-transparent shadow-sm">
+                    <i class="fas fa-save mr-1"></i> Simpan AI Engine
+                </button>
+                <button id="btn-ai-test" class="px-5 py-2.5 btn-secondary rounded-xl text-sm font-semibold">
+                    <i class="fas fa-plug mr-1"></i> Test Koneksi
+                </button>
+                <span id="ai-test-result" class="text-xs text-slate-500"></span>
+            </div>
         </div>
 
         <!-- Detection Parameters -->
         <div class="setting-card">
-            <h3 class="section-title"><i class="fas fa-crosshairs text-sky-400"></i> Deteksi</h3>
+            <h3 class="section-title"><i class="fas fa-crosshairs text-sky-500"></i> Deteksi</h3>
             <div class="space-y-4">
                 <div>
                     <label class="setting-label">Confidence Threshold</label>
@@ -106,7 +333,7 @@
 
         <!-- Enforcement Settings -->
         <div class="setting-card">
-            <h3 class="section-title"><i class="fas fa-shield-halved text-red-400"></i> Enforcement (E-TLE)</h3>
+            <h3 class="section-title"><i class="fas fa-shield-halved text-rose-500"></i> Enforcement (E-TLE)</h3>
             <div class="space-y-4">
                 <div class="flex items-center justify-between">
                     <div><div class="text-sm text-slate-200">Violation Detection</div><p class="setting-desc">Master switch enforcement engine</p></div>
@@ -137,14 +364,14 @@
 
         <!-- News/Social Media Monitor -->
         <div class="setting-card lg:col-span-2">
-            <h3 class="section-title"><i class="fas fa-newspaper text-amber-400"></i> Monitor Berita Lalu Lintas</h3>
+            <h3 class="section-title"><i class="fas fa-newspaper text-amber-500"></i> Monitor Berita Lalu Lintas</h3>
             <div class="space-y-3">
                 <div>
                     <label class="setting-label">Keyword Pencarian Berita</label>
                     <input id="s-news-query" class="input-field" placeholder="macet OR kemacetan OR lalu lintas jakarta">
                     <p class="setting-desc">Keyword untuk mencari berita terkait lalu lintas. Gunakan OR untuk multiple terms.</p>
                 </div>
-                <button id="btn-test-news" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold rounded-lg">
+                <button id="btn-test-news" class="px-5 py-2.5 btn-primary rounded-xl text-sm font-semibold border-transparent shadow-sm">
                     <i class="fas fa-search mr-1"></i> Test Pencarian
                 </button>
                 <div id="news-preview" class="mt-3 rounded-lg border border-slate-800 p-3 hidden max-h-[250px] overflow-y-auto">
@@ -155,7 +382,7 @@
 
         <!-- X.com / CRM Social Scraper -->
         <div class="setting-card lg:col-span-2">
-            <h3 class="section-title"><i class="fab fa-x-twitter text-slate-300"></i> CRM — X.com Social Media Scraper</h3>
+            <h3 class="section-title"><i class="fab fa-x-twitter text-slate-800 dark:text-slate-200"></i> CRM — X.com Social Media Scraper</h3>
             <div class="space-y-3">
                 <div>
                     <label class="setting-label">Search Query (Hashtag / Mention)</label>
@@ -169,7 +396,7 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <span id="x-cookies-status" class="text-xs text-slate-500">—</span>
-                    <button id="btn-test-x" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">
+                    <button id="btn-test-x" class="px-5 py-2.5 btn-secondary rounded-xl text-sm font-semibold shadow-sm">
                         <i class="fab fa-x-twitter mr-1"></i> Test Scrape
                     </button>
                 </div>
@@ -181,7 +408,7 @@
 
         <!-- Hikvision ISAPI Integration -->
         <div class="setting-card lg:col-span-2">
-            <h3 class="section-title"><i class="fas fa-camera-cctv text-cyan-400"></i> Hikvision ISAPI Integration</h3>
+            <h3 class="section-title"><i class="fas fa-camera-cctv text-cyan-500"></i> Hikvision ISAPI Integration</h3>
             <p class="setting-desc mb-4">Koneksi langsung ke kamera Hikvision via ISAPI untuk snapshot resolusi tinggi dan informasi perangkat.</p>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -210,17 +437,17 @@
                             <input id="hik-channel" type="number" class="input-field" value="1" min="1" max="32">
                         </div>
                     </div>
-                    <div class="flex gap-2 pt-2">
-                        <button id="btn-hik-test" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg">
+                    <div class="flex flex-wrap gap-2 pt-2">
+                        <button id="btn-hik-test" class="px-5 py-2.5 btn-primary rounded-xl text-sm font-semibold border-transparent shadow-sm">
                             <i class="fas fa-plug mr-1"></i> Test Koneksi
                         </button>
-                        <button id="btn-hik-snapshot" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-lg">
+                        <button id="btn-hik-snapshot" class="px-5 py-2.5 btn-secondary rounded-xl text-sm font-semibold shadow-sm">
                             <i class="fas fa-camera mr-1"></i> Snapshot
                         </button>
-                        <button id="btn-hik-anpr" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-lg">
+                        <button id="btn-hik-anpr" class="px-5 py-2.5 btn-secondary rounded-xl text-sm font-semibold shadow-sm">
                             <i class="fas fa-id-card mr-1"></i> ANPR
                         </button>
-                        <button id="btn-hik-add" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">
+                        <button id="btn-hik-add" class="px-5 py-2.5 btn-secondary rounded-xl text-sm font-semibold shadow-sm">
                             <i class="fas fa-plus mr-1"></i> Tambah
                         </button>
                     </div>
@@ -270,6 +497,37 @@
         setTimeout(() => t.classList.add('hidden'), 3000);
     }
 
+    // CSRF: required for POST/PATCH when DEMO_MODE=0. Cache token per page load.
+    let _csrfToken = null;
+    async function getCsrf(){
+        if (_csrfToken) return _csrfToken;
+        try {
+            const r = await fetch('/api/csrf_token');
+            const d = await r.json();
+            _csrfToken = d.csrf_token || '';
+        } catch(e) { _csrfToken = ''; }
+        return _csrfToken;
+    }
+    async function postJSON(url, body){
+        const token = await getCsrf();
+        const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body: JSON.stringify(body || {}),
+        });
+        // Token may have expired — refresh once and retry
+        if (r.status === 403){
+            _csrfToken = null;
+            const t2 = await getCsrf();
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': t2 },
+                body: JSON.stringify(body || {}),
+            });
+        }
+        return r;
+    }
+
     async function loadSettings(){
         try {
             const r = await fetch('/api/settings');
@@ -277,6 +535,7 @@
             if (d.status !== 'success') return;
             settings = d.settings;
             render();
+            renderAiEngine();
         } catch(e) {
             console.error('Failed to load settings:', e);
         }
@@ -366,11 +625,179 @@
 
     async function switchModel(name){
         showToast('Switching model...', false);
-        const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ model: { active_model: name } }) });
+        const r = await postJSON('/api/settings', { model: { active_model: name } });
         const d = await r.json();
         if (d.status === 'success'){ showToast(`Model: ${name}`, false); loadSettings(); }
         else showToast(d.message || 'Failed', true);
     }
+
+    // ---- AI Engine (LLM provider) ----
+    let _aiMode = 'sumopod';
+    let _ollamaReachable = false;
+
+    function detectAiMode(ai){
+        // "off": both AI features disabled
+        if (!ai.use_ai_for_anpr && !ai.use_ai_for_chat) return 'off';
+        // "ollama": base_url points to a local ollama endpoint
+        const url = (ai.base_url || '').toLowerCase();
+        if (url.includes('11434') || url.includes('localhost') || url.includes('127.0.0.1') || (ai.provider || '').toLowerCase() === 'ollama') return 'ollama';
+        return 'sumopod';
+    }
+
+    function applyAiModeUI(mode){
+        _aiMode = mode;
+        document.querySelectorAll('.ai-mode-card').forEach(c => c.classList.toggle('active', c.dataset.aiMode === mode));
+        document.getElementById('ai-ollama-config').classList.toggle('hidden', mode !== 'ollama');
+        document.getElementById('ai-sumopod-config').classList.toggle('hidden', mode !== 'sumopod');
+        const togglesWrap = document.getElementById('ai-feature-toggles');
+        if (mode === 'off'){
+            setToggle('t-ai-anpr', false); setToggle('t-ai-chat', false);
+            togglesWrap.classList.add('opacity-50', 'pointer-events-none');
+        } else {
+            togglesWrap.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        const badge = document.getElementById('ai-active-badge');
+        const labels = { ollama: 'Ollama Lokal', sumopod: 'SumoPod Cloud', off: 'AI Dimatikan' };
+        badge.textContent = labels[mode] || '—';
+    }
+
+    async function loadOllamaModels(selected){
+        const sel = document.getElementById('ai-ollama-model');
+        const dot = document.getElementById('ai-ollama-dot');
+        const hint = document.getElementById('ai-ollama-hint');
+        try {
+            const r = await fetch('/api/ai/ollama_models');
+            const d = await r.json();
+            _ollamaReachable = !!d.reachable;
+            dot.className = 'ml-auto inline-flex h-2 w-2 rounded-full ' + (d.reachable ? 'bg-emerald-500' : 'bg-rose-500');
+            document.getElementById('ai-ollama-url').value = d.url || 'http://localhost:11434';
+            if (!d.reachable){
+                sel.innerHTML = '<option value="">— Ollama tidak terjangkau —</option>';
+                hint.innerHTML = '<span class="text-rose-500">Ollama tidak running. Jalankan <code>ollama serve</code> lalu refresh.</span>';
+                return;
+            }
+            const models = d.models || [];
+            if (!models.length){
+                sel.innerHTML = '<option value="">— tidak ada model —</option>';
+                hint.innerHTML = '<span class="text-amber-500">Belum ada model. Jalankan mis. <code>ollama pull qwen2.5:3b</code>.</span>';
+                return;
+            }
+            sel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+            if (selected && models.includes(selected)) sel.value = selected;
+            hint.textContent = `${models.length} model terpasang.`;
+        } catch(e) {
+            _ollamaReachable = false;
+            dot.className = 'ml-auto inline-flex h-2 w-2 rounded-full bg-rose-500';
+            sel.innerHTML = '<option value="">— error —</option>';
+        }
+    }
+
+    function renderAiEngine(){
+        const ai = settings.ai_provider || {};
+        document.getElementById('ai-base-url').value = ai.base_url || 'https://ai.sumopod.com/v1';
+        document.getElementById('ai-model').value = ai.model || '';
+        const keyStatus = document.getElementById('ai-key-status');
+        keyStatus.innerHTML = ai.api_key_set
+            ? '<i class="fas fa-check-circle text-emerald-500 mr-1"></i>API key tersimpan. Kosongkan untuk tetap pakai yang lama.'
+            : '<i class="fas fa-exclamation-circle text-amber-500 mr-1"></i>Belum ada API key.';
+        setToggle('t-ai-anpr', ai.use_ai_for_anpr);
+        setToggle('t-ai-chat', ai.use_ai_for_chat);
+
+        const mode = detectAiMode(ai);
+        applyAiModeUI(mode);
+        // Preload ollama models (also updates reachability dot)
+        loadOllamaModels(mode === 'ollama' ? (ai.model || '') : '');
+        loadVehicleAgentStatus();
+    }
+
+    document.querySelectorAll('.ai-mode-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const mode = card.dataset.aiMode;
+            applyAiModeUI(mode);
+            if (mode === 'ollama') loadOllamaModels(document.getElementById('ai-ollama-model').value);
+            if (mode !== 'off'){ setToggle('t-ai-anpr', true); setToggle('t-ai-chat', true); }
+        });
+    });
+
+    document.getElementById('btn-ai-save').addEventListener('click', async () => {
+        const payload = { ai_provider: {} };
+        const ap = payload.ai_provider;
+        if (_aiMode === 'off'){
+            ap.use_ai_for_anpr = false;
+            ap.use_ai_for_chat = false;
+        } else if (_aiMode === 'ollama'){
+            const model = document.getElementById('ai-ollama-model').value;
+            if (!model){ showToast('Pilih model Ollama dulu', true); return; }
+            const base = (document.getElementById('ai-ollama-url').value || 'http://localhost:11434').replace(/\/$/, '');
+            ap.provider = 'ollama';
+            ap.base_url = base + '/v1';  // OpenAI-compatible endpoint
+            ap.api_key = 'ollama';       // placeholder — ollama ignores it but code needs non-empty
+            ap.model = model;
+            ap.chat_model = model;
+            ap.use_ai_for_anpr = getToggle('t-ai-anpr');
+            ap.use_ai_for_chat = getToggle('t-ai-chat');
+        } else { // sumopod
+            ap.provider = 'sumopod';
+            ap.base_url = document.getElementById('ai-base-url').value.trim();
+            ap.model = document.getElementById('ai-model').value.trim();
+            ap.chat_model = document.getElementById('ai-model').value.trim();
+            const key = document.getElementById('ai-api-key').value.trim();
+            if (key) ap.api_key = key;
+            ap.use_ai_for_anpr = getToggle('t-ai-anpr');
+            ap.use_ai_for_chat = getToggle('t-ai-chat');
+        }
+        const r = await postJSON('/api/settings', payload);
+        const d = await r.json();
+        if (d.status === 'success'){
+            showToast('AI Engine disimpan: ' + document.getElementById('ai-active-badge').textContent, false);
+            document.getElementById('ai-api-key').value = '';
+            loadSettings();
+        } else showToast(d.message || 'Gagal menyimpan', true);
+    });
+
+    document.getElementById('btn-ai-test').addEventListener('click', async () => {
+        const res = document.getElementById('ai-test-result');
+        res.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Menguji...';
+        try {
+            const r = await fetch('/api/ai/test');
+            const d = await r.json();
+            if (d.status === 'success' || d.connected){
+                res.innerHTML = `<span class="text-emerald-500"><i class="fas fa-check-circle mr-1"></i>OK — ${d.provider || ''} ${d.model || ''}</span>`;
+            } else {
+                res.innerHTML = `<span class="text-rose-500"><i class="fas fa-times-circle mr-1"></i>${d.message || d.error || 'Gagal'}</span>`;
+            }
+        } catch(e) {
+            res.innerHTML = `<span class="text-rose-500">${e.message}</span>`;
+        }
+    });
+
+    // ---- Vehicle Identity Agent ----
+    async function loadVehicleAgentStatus(){
+        const badge = document.getElementById('va-status');
+        try {
+            const r = await fetch('/api/agent/vehicle_identity');
+            const d = await r.json();
+            if (d.status !== 'success'){ badge.textContent = 'n/a'; return; }
+            if (!d.running){
+                badge.textContent = 'Tidak jalan';
+                badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500';
+            } else if (d.paused){
+                badge.textContent = 'Paused (hemat token)';
+                badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300';
+            } else {
+                badge.textContent = 'Aktif';
+                badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300';
+            }
+        } catch(e) { badge.textContent = 'error'; }
+    }
+    async function vehicleAgentAction(action){
+        const r = await postJSON('/api/agent/vehicle_identity', { action });
+        const d = await r.json();
+        showToast(d.message || (d.status === 'success' ? 'OK' : 'Gagal'), d.status !== 'success');
+        loadVehicleAgentStatus();
+    }
+    document.getElementById('btn-va-pause').addEventListener('click', () => vehicleAgentAction('pause'));
+    document.getElementById('btn-va-resume').addEventListener('click', () => vehicleAgentAction('resume'));
 
     document.getElementById('btn-save').addEventListener('click', async () => {
         const payload = {
@@ -397,7 +824,7 @@
                 timezone: document.getElementById('s-timezone') ? document.getElementById('s-timezone').value : undefined,
             }
         };
-        const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const r = await postJSON('/api/settings', payload);
         const d = await r.json();
         if (d.status === 'success') showToast('Settings disimpan! (persist setelah restart)', false);
         else showToast(d.message || 'Error', true);
@@ -405,7 +832,7 @@
 
     document.getElementById('btn-restart').addEventListener('click', async () => {
         if (!confirm('Restart semua camera agents? Stream akan terputus sebentar.')) return;
-        const r = await fetch('/api/settings/restart_agents', { method: 'POST' });
+        const r = await postJSON('/api/settings/restart_agents', {});
         const d = await r.json();
         showToast(`Agents restarted (${d.agents_running || 0} running)`, false);
         loadSettings();

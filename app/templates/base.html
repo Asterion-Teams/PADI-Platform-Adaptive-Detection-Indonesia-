@@ -4,11 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}PADI{% endblock %}</title>
+    <script>
+        // Apply theme immediately to prevent flashing
+        (() => {
+            const saved = localStorage.getItem('theme');
+            const isDark = saved === 'dark'; // Force default to light if no saved pref
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+        // External base URL for HLS proxy (via nginx reverse proxy)
+        window.EXTERNAL_BASE_URL = "https://compe.f-mc.my.id/hlsproxy";
+    </script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script>
+    // Global CSRF interceptor: auto-attach token to same-origin mutating requests.
+    // Required since DEMO_MODE=0 enforces CSRF on all POST/PUT/PATCH/DELETE endpoints.
+    (function(){
+        function getToken(){
+            const m = document.querySelector('meta[name="csrf-token"]');
+            return m ? m.getAttribute('content') : '';
+        }
+        window.__getCsrfToken = getToken;
+        const _origFetch = window.fetch.bind(window);
+        const MUTATING = { POST:1, PUT:1, PATCH:1, DELETE:1 };
+        function isSameOrigin(url){
+            try {
+                if (typeof url !== 'string') url = (url && url.url) || '';
+                if (url.startsWith('/')) return true;
+                return new URL(url, location.href).origin === location.origin;
+            } catch(e) { return true; }
+        }
+        window.fetch = async function(input, init){
+            init = init || {};
+            const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+            const url = typeof input === 'string' ? input : (input && input.url) || '';
+            if (MUTATING[method] && isSameOrigin(url)){
+                const headers = new Headers(init.headers || (typeof input === 'object' ? input.headers : undefined) || {});
+                if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', getToken());
+                init.headers = headers;
+                let res = await _origFetch(input, init);
+                // Token expired/invalid -> refresh once and retry
+                if (res.status === 403){
+                    try {
+                        const tr = await _origFetch('/api/csrf_token', { cache: 'no-store' });
+                        const td = await tr.json();
+                        if (td && td.csrf_token){
+                            const m = document.querySelector('meta[name="csrf-token"]');
+                            if (m) m.setAttribute('content', td.csrf_token);
+                            headers.set('X-CSRF-Token', td.csrf_token);
+                            init.headers = headers;
+                            res = await _origFetch(input, init);
+                        }
+                    } catch(e) { /* keep original 403 */ }
+                }
+                return res;
+            }
+            return _origFetch(input, init);
+        };
+    })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -28,43 +91,185 @@
     </script>
     {% block head_extra %}{% endblock %}
     <style>
+        :root {
+            /* Light theme variables (soft, professional light gray/blue palette) */
+            --bg-color: #f8fafc;
+            --bg-gradient-1: rgba(56, 189, 248, 0.03);
+            --bg-gradient-2: rgba(99, 102, 241, 0.03);
+            --bg-gradient-3: rgba(16, 185, 129, 0.02);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-tertiary: #64748b;
+            --border-color: rgba(0, 0, 0, 0.06);
+            --glass-sidebar: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95));
+            --glass-header: rgba(255, 255, 255, 0.85);
+            --glass-panel: #ffffff;
+            --input-surface: #f1f5f9;
+            --scrollbar-track: #f8fafc;
+            --scrollbar-thumb: #cbd5e1;
+            --scrollbar-thumb-hover: #94a3b8;
+            --hud-grid-color: rgba(15, 23, 42, 0.015);
+            --shadow-panel: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 0 3px rgba(0,0,0,0.02);
+            
+            --nav-link-color: #475569;
+            --nav-link-hover-bg: rgba(0, 0, 0, 0.03);
+            --nav-link-active-color: #0284c7;
+            --nav-link-active-bg: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(56, 189, 248, 0.03));
+            --nav-link-active-border: rgba(56, 189, 248, 0.2);
+            
+            --select-bg: #ffffff;
+            --select-color: #0f172a;
+            --select-border: rgba(0, 0, 0, 0.1);
+        }
+
+        .dark {
+            /* Dark theme variables (original PADI styles, polished) */
+            --bg-color: #0b1220;
+            --bg-gradient-1: rgba(56, 189, 248, 0.10);
+            --bg-gradient-2: rgba(99, 102, 241, 0.10);
+            --bg-gradient-3: rgba(16, 185, 129, 0.07);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --border-color: rgba(255, 255, 255, 0.06);
+            --glass-sidebar: linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.78));
+            --glass-header: rgba(2, 6, 23, 0.55);
+            --glass-panel: rgba(15, 23, 42, 0.58);
+            --input-surface: rgba(2, 6, 23, 0.55);
+            --scrollbar-track: #0f172a;
+            --scrollbar-thumb: #334155;
+            --scrollbar-thumb-hover: #475569;
+            --hud-grid-color: rgba(56, 189, 248, 0.07);
+            --shadow-panel: 0 18px 45px -28px rgba(0, 0, 0, 0.85);
+
+            --nav-link-color: #94a3b8;
+            --nav-link-hover-bg: rgba(255, 255, 255, 0.04);
+            --nav-link-active-color: #e0f2fe;
+            --nav-link-active-bg: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.05));
+            --nav-link-active-border: rgba(56, 189, 248, 0.22);
+            
+            --select-bg: #0f172a;
+            --select-color: #e2e8f0;
+            --select-border: rgba(255, 255, 255, 0.12);
+        }
+
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+        
         body {
-            background-color: #0b1220;
-            background-image: radial-gradient(1000px circle at 10% 10%, rgba(56, 189, 248, 0.10), transparent 55%),
-                              radial-gradient(900px circle at 95% 15%, rgba(99, 102, 241, 0.10), transparent 55%),
-                              radial-gradient(900px circle at 80% 90%, rgba(16, 185, 129, 0.07), transparent 55%);
-            color: #e2e8f0;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(1000px circle at 10% 10%, var(--bg-gradient-1), transparent 55%),
+                              radial-gradient(900px circle at 95% 15%, var(--bg-gradient-2), transparent 55%),
+                              radial-gradient(900px circle at 80% 90%, var(--bg-gradient-3), transparent 55%);
+            color: var(--text-primary);
             font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
         }
         .glass-sidebar {
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.78));
+            background: var(--glass-sidebar);
             backdrop-filter: blur(14px);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
             border-radius: 1.25rem;
-            box-shadow: 0 18px 45px -28px rgba(0, 0, 0, 0.85);
+            box-shadow: var(--shadow-panel);
+            transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
         }
-        .glass-header { background: rgba(2, 6, 23, 0.55); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 1.1rem; }
-        .glass-panel { background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 1.25rem; box-shadow: 0 18px 45px -28px rgba(0, 0, 0, 0.85); }
-        .input-surface { background: rgba(2, 6, 23, 0.55); border: 1px solid rgba(255,255,255,0.10); }
+        .glass-header { 
+            background: var(--glass-header); 
+            backdrop-filter: blur(14px); 
+            border: 1px solid var(--border-color); 
+            border-radius: 1.1rem; 
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .glass-panel { 
+            background: var(--glass-panel); 
+            backdrop-filter: blur(12px); 
+            border: 1px solid var(--border-color); 
+            border-radius: 1.25rem; 
+            box-shadow: var(--shadow-panel); 
+            transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+        .input-surface { 
+            background: var(--input-surface); 
+            border: 1px solid var(--border-color); 
+            color: var(--text-primary);
+            transition: background 0.3s, border-color 0.3s, color 0.3s;
+        }
         .input-surface:focus { outline: none; border-color: rgba(56,189,248,0.45); box-shadow: 0 0 0 3px rgba(56,189,248,0.12); }
-        .nav-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 0.85rem; color: #94a3b8; border-radius: 0.9rem; transition: all 0.18s ease; font-size: 0.95rem; text-decoration: none; border: 1px solid transparent; }
-        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.06); }
-        .nav-link.active { color: #e0f2fe; background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.05)); border-color: rgba(56, 189, 248, 0.22); font-weight: 700; }
+        
+        select, select.input-surface, select.input-field {
+            background-color: var(--select-bg) !important;
+            color: var(--select-color) !important;
+            border: 1px solid var(--select-border) !important;
+            border-radius: 0.6rem;
+            padding: 0.55rem 2.5rem 0.55rem 0.85rem;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.85rem center;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px -2px rgba(0,0,0,0.1);
+        }
+        select:hover { border-color: rgba(56,189,248,0.4); box-shadow: 0 2px 10px -2px rgba(56,189,248,0.08); }
+        select:focus { outline: none; border-color: rgba(56,189,248,0.6); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+        @supports (color-scheme: dark) {
+            select { color-scheme: dark; }
+        }
+        select option {
+            background-color: var(--select-bg);
+            color: var(--select-color);
+            padding: 8px 12px;
+        }
+        select option:checked, select option:hover {
+            background-color: var(--scrollbar-thumb-hover);
+        }
+        
+        .nav-link { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.75rem; 
+            padding: 0.7rem 0.85rem; 
+            color: var(--nav-link-color); 
+            border-radius: 0.9rem; 
+            transition: all 0.18s ease; 
+            font-size: 0.95rem; 
+            text-decoration: none; 
+            border: 1px solid transparent; 
+        }
+        .nav-link:hover { 
+            color: var(--text-primary); 
+            background: var(--nav-link-hover-bg); 
+            border-color: var(--border-color); 
+        }
+        .nav-link.active { 
+            color: var(--nav-link-active-color); 
+            background: var(--nav-link-active-bg); 
+            border-color: var(--nav-link-active-border); 
+            font-weight: 700; 
+        }
         .nav-link.disabled { opacity: 0.55; cursor: not-allowed; }
-        .nav-link.disabled:hover { background: transparent; border-color: transparent; color: #94a3b8; }
+        .nav-link.disabled:hover { background: transparent; border-color: transparent; color: var(--nav-link-color); }
         .nav-section { text-transform: uppercase; font-size: 0.72rem; font-weight: 800; color: #64748b; margin-top: 1.1rem; margin-bottom: 0.55rem; padding-left: 0.25rem; letter-spacing: 0.08em; }
-        .hud-grid { background-image: linear-gradient(rgba(56, 189, 248, 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.07) 1px, transparent 1px); background-size: 56px 56px; }
-        body.sidebar-collapsed #sidebar { width: 5.25rem !important; }
+        .hud-grid { 
+            background-image: linear-gradient(var(--hud-grid-color) 1px, transparent 1px), 
+                              linear-gradient(90deg, var(--hud-grid-color) 1px, transparent 1px); 
+            background-size: 56px 56px; 
+            transition: background-image 0.3s;
+        }
+        body.sidebar-collapsed #sidebar { width: 4.5rem !important; }
         body.sidebar-collapsed #sidebar .sidebar-text { display: none !important; }
         body.sidebar-collapsed #sidebar .nav-section { display: none !important; }
         body.sidebar-collapsed #sidebar .sidebar-actions { display: none !important; }
         body.sidebar-collapsed #sidebar .sidebar-extra { display: none !important; }
-        body.sidebar-collapsed #sidebar .nav-link { justify-content: center; gap: 0; padding-left: 0.8rem; padding-right: 0.8rem; }
+        body.sidebar-collapsed #sidebar .nav-link { justify-content: center; gap: 0; padding-left: 0.6rem; padding-right: 0.6rem; }
         body.sidebar-collapsed #sidebar .nav-link i { width: auto !important; }
+        body.sidebar-collapsed main { margin-left: 5.5rem !important; }
 
         @keyframes chatbot-float {
             0%, 100% { transform: translateY(0); }
@@ -104,15 +309,9 @@
             max-height: min(520px, calc(100vh - 8rem));
         }
         @media (max-width: 767px) {
-            .glass-sidebar {
-                border-radius: 1rem;
-            }
-            .glass-header {
-                border-radius: 0.95rem;
-            }
-            .glass-panel {
-                border-radius: 1rem;
-            }
+            .glass-sidebar { border-radius: 1rem; }
+            .glass-header { border-radius: 0.95rem; }
+            .glass-panel { border-radius: 1rem; }
             .chatbot-panel {
                 width: min(100vw - 1rem, 390px);
                 max-height: min(70vh, calc(100vh - 6.5rem));
@@ -127,25 +326,337 @@
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(99, 102, 241, 0.10));
             border-color: rgba(56, 189, 248, 0.22);
         }
+
+        /* Dynamic Theme Overrides for Light Mode */
+        html:not(.dark) body {
+            color: #0f172a !important;
+            background-color: #f4f6f9 !important; /* Softer background, less piercing */
+            background-image: none !important;
+        }
+        html:not(.dark) .hud-grid {
+            opacity: 0.1 !important;
+            background-image: linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), 
+                              linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px) !important;
+        }
+        html:not(.dark) .text-white {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .text-slate-100 {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .text-slate-200 {
+            color: #1e293b !important;
+        }
+        html:not(.dark) .text-slate-300 {
+            color: #334155 !important;
+        }
+        html:not(.dark) .text-slate-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) .text-slate-500 {
+            color: #64748b !important;
+        }
+        html:not(.dark) .text-slate-600 {
+            color: #94a3b8 !important;
+        }
+        html:not(.dark) .text-gray-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) .text-gray-500 {
+            color: #64748b !important;
+        }
+        
+        html:not(.dark) #sidebar .text-white {
+            color: #0f172a !important;
+        }
+        html:not(.dark) #sidebar .text-slate-500 {
+            color: #64748b !important;
+        }
+        
+        html:not(.dark) .bg-slate-900 {
+            background-color: #f1f5f9 !important;
+        }
+        html:not(.dark) .bg-slate-950 {
+            background-color: #e2e8f0 !important;
+        }
+        html:not(.dark) .bg-slate-900\/60 {
+            background-color: rgba(226, 232, 240, 0.6) !important;
+        }
+        html:not(.dark) .bg-slate-950\/35 {
+            background-color: rgba(226, 232, 240, 0.5) !important;
+        }
+        html:not(.dark) .bg-slate-950\/25 {
+            background-color: rgba(226, 232, 240, 0.3) !important;
+        }
+        html:not(.dark) .bg-slate-900\/35 {
+            background-color: rgba(255, 255, 255, 0.6) !important;
+        }
+        html:not(.dark) .bg-slate-900\/25 {
+            background-color: rgba(255, 255, 255, 0.4) !important;
+        }
+        html:not(.dark) .bg-slate-800 {
+            background-color: #f1f5f9 !important;
+        }
+        html:not(.dark) .bg-slate-800\/40 {
+            background-color: rgba(241, 245, 249, 0.7) !important;
+        }
+        html:not(.dark) .bg-slate-700\/50 {
+            background-color: rgba(226, 232, 240, 0.5) !important;
+        }
+        html:not(.dark) .bg-slate-850 {
+            background-color: #f8fafc !important;
+        }
+        html:not(.dark) .bg-slate-950\/20 {
+            background-color: rgba(0, 0, 0, 0.02) !important;
+        }
+        html:not(.dark) .bg-slate-950\/15 {
+            background-color: rgba(0, 0, 0, 0.02) !important;
+        }
+        
+        html:not(.dark) .border-white\/10 {
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+        html:not(.dark) .border-white\/5 {
+            border-color: rgba(0, 0, 0, 0.04) !important;
+        }
+        html:not(.dark) .border-white\/15 {
+            border-color: rgba(0, 0, 0, 0.12) !important;
+        }
+        html:not(.dark) .border-white\/18 {
+            border-color: rgba(0, 0, 0, 0.15) !important;
+        }
+        html:not(.dark) .border-slate-800 {
+            border-color: #e2e8f0 !important;
+        }
+        html:not(.dark) .border-slate-700 {
+            border-color: #cbd5e1 !important;
+        }
+        html:not(.dark) .border-slate-600 {
+            border-color: #cbd5e1 !important;
+        }
+        
+        html:not(.dark) .chatbot-fab {
+            background: linear-gradient(135deg, #0284c7, #4f46e5);
+            color: white !important;
+            border-color: transparent;
+        }
+        html:not(.dark) .chatbot-msg {
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            color: #0f172a !important;
+        }
+        html:not(.dark) .chatbot-msg.user {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(99, 102, 241, 0.05));
+            border-color: rgba(56, 189, 248, 0.22);
+            color: #0f172a !important;
+        }
+        html:not(.dark) .chatbot-panel .text-white {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .chatbot-panel .text-slate-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) #chatbot-messages .text-slate-100 {
+            color: #0f172a !important;
+        }
+
+        html:not(.dark) .kpi-card {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .section-card {
+            background: rgba(255, 255, 255, 0.7) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .insight-card {
+            background: rgba(241, 245, 249, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.05) !important;
+        }
+        html:not(.dark) .quick-btn {
+            background: rgba(241, 245, 249, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .cam-card {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .stat-card {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .mini-card {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .input-field {
+            background: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.15) !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .modal-panel {
+            background: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 20px 60px -15px rgba(0,0,0,0.15) !important;
+        }
+
+        /* Keep white text for solid buttons and badges in light mode */
+        html:not(.dark) .bg-emerald-600, html:not(.dark) .bg-emerald-600 *,
+        html:not(.dark) .bg-emerald-600\/80, html:not(.dark) .bg-emerald-600\/80 *,
+        html:not(.dark) .bg-emerald-600\/90, html:not(.dark) .bg-emerald-600\/90 *,
+        html:not(.dark) .bg-emerald-500, html:not(.dark) .bg-emerald-500 *,
+        html:not(.dark) .bg-red-600, html:not(.dark) .bg-red-600 *,
+        html:not(.dark) .bg-red-600\/90, html:not(.dark) .bg-red-600\/90 *,
+        html:not(.dark) .bg-red-500, html:not(.dark) .bg-red-500 *,
+        html:not(.dark) .bg-blue-600, html:not(.dark) .bg-blue-600 *,
+        html:not(.dark) .bg-blue-500, html:not(.dark) .bg-blue-500 *,
+        html:not(.dark) .bg-sky-600, html:not(.dark) .bg-sky-600 *,
+        html:not(.dark) .bg-sky-600\/90, html:not(.dark) .bg-sky-600\/90 *,
+        html:not(.dark) .bg-sky-500, html:not(.dark) .bg-sky-500 *,
+        html:not(.dark) .bg-orange-600\/90, html:not(.dark) .bg-orange-600\/90 *,
+        html:not(.dark) .bg-slate-700\/90, html:not(.dark) .bg-slate-700\/90 *,
+        html:not(.dark) .bg-slate-700, html:not(.dark) .bg-slate-700 *,
+        html:not(.dark) .hover\:bg-slate-700:hover, html:not(.dark) .hover\:bg-slate-700:hover *,
+        html:not(.dark) .hover\:text-white:hover, html:not(.dark) .hover\:text-white:hover *,
+        html:not(.dark) button.bg-slate-700, html:not(.dark) button.bg-slate-700 *,
+        html:not(.dark) a.bg-slate-700, html:not(.dark) a.bg-slate-700 *,
+        html:not(.dark) .live-badge, html:not(.dark) .live-badge * {
+            color: #ffffff !important;
+        }
+
+        /* High-contrast status text colors for Light Mode */
+        html:not(.dark) .text-emerald-400 { color: #047857 !important; }
+        html:not(.dark) .text-red-400 { color: #b91c1c !important; }
+        html:not(.dark) .text-sky-400 { color: #0369a1 !important; }
+        html:not(.dark) .text-amber-400 { color: #b45309 !important; }
+        html:not(.dark) .text-purple-400 { color: #6d28d9 !important; }
+        html:not(.dark) .text-blue-400 { color: #1d4ed8 !important; }
+        html:not(.dark) .text-orange-400 { color: #c2410c !important; }
+        html:not(.dark) .text-emerald-300 { color: #059669 !important; }
+        html:not(.dark) .text-red-300 { color: #dc2626 !important; }
+        html:not(.dark) .text-sky-300 { color: #0284c7 !important; }
+        html:not(.dark) .text-amber-300 { color: #d97706 !important; }
+        html:not(.dark) .text-purple-300 { color: #7c3aed !important; }
+        html:not(.dark) .text-blue-300 { color: #2563eb !important; }
+        html:not(.dark) .text-orange-300 { color: #ea580c !important; }
+
+        /* Violation chips contrast fixes in Light Mode */
+        html:not(.dark) .v-illegal_parking { background: rgba(220,38,38,0.1) !important; color: #dc2626 !important; border-color: rgba(220,38,38,0.2) !important; }
+        html:not(.dark) .v-busway_occupancy { background: rgba(249,115,22,0.1) !important; color: #ea580c !important; border-color: rgba(249,115,22,0.2) !important; }
+        html:not(.dark) .v-bicycle_lane_occupancy { background: rgba(6,182,212,0.1) !important; color: #0891b2 !important; border-color: rgba(6,182,212,0.2) !important; }
+        html:not(.dark) .v-illegal_pickup_dropoff { background: rgba(234,179,8,0.1) !important; color: #ca8a04 !important; border-color: rgba(234,179,8,0.2) !important; }
+        html:not(.dark) .v-wrong_way { background: rgba(168,85,247,0.1) !important; color: #9333ea !important; border-color: rgba(168,85,247,0.2) !important; }
+        html:not(.dark) .v-default { background: rgba(148,163,184,0.1) !important; color: #475569 !important; border-color: rgba(148,163,184,0.2) !important; }
+
+        /* Camera stream badges contrast fixes in Light Mode */
+        html:not(.dark) .badge-hls { background: rgba(139,92,246,0.1) !important; color: #6d28d9 !important; border-color: rgba(139,92,246,0.2) !important; }
+        html:not(.dark) .badge-mp4 { background: rgba(245,158,11,0.1) !important; color: #b45309 !important; border-color: rgba(245,158,11,0.2) !important; }
+        html:not(.dark) .badge-rtsp { background: rgba(6,182,212,0.1) !important; color: #0891b2 !important; border-color: rgba(6,182,212,0.2) !important; }
+        html:not(.dark) .badge-active { background: rgba(16,185,129,0.1) !important; color: #059669 !important; border-color: rgba(16,185,129,0.2) !important; }
+        html:not(.dark) .badge-http { background: rgba(56,189,248,0.1) !important; color: #0284c7 !important; border-color: rgba(56,189,248,0.2) !important; }
+
+        /* Status texts contrast fixes in Light Mode */
+        html:not(.dark) .status-pending { color: #d97706 !important; }
+        html:not(.dark) .status-dispatched { color: #2563eb !important; }
+        html:not(.dark) .status-resolved { color: #16a34a !important; }
+        html:not(.dark) .status-rejected { color: #dc2626 !important; }
+        html:not(.dark) .status-emergency { color: #ea580c !important; }
+
+        /* Zone type pills in Light Mode */
+        html:not(.dark) .zone-type-pill.zt-no_parking { background: rgba(220,38,38,0.08) !important; color: #dc2626 !important; border-color: rgba(220,38,38,0.3) !important; }
+        html:not(.dark) .zone-type-pill.zt-busway { background: rgba(249,115,22,0.08) !important; color: #ea580c !important; border-color: rgba(249,115,22,0.3) !important; }
+        html:not(.dark) .zone-type-pill.zt-bicycle { background: rgba(6,182,212,0.08) !important; color: #0891b2 !important; border-color: rgba(6,182,212,0.3) !important; }
+        html:not(.dark) .zone-type-pill.zt-bus_stop { background: rgba(16,185,129,0.08) !important; color: #059669 !important; border-color: rgba(16,185,129,0.3) !important; }
+        html:not(.dark) .zone-type-pill.zt-wrong_way { background: rgba(168,85,247,0.08) !important; color: #9333ea !important; border-color: rgba(168,85,247,0.3) !important; }
+        html:not(.dark) .zt-no_parking { background: rgba(220,38,38,0.08) !important; color: #dc2626 !important; border-color: rgba(220,38,38,0.3) !important; }
+        html:not(.dark) .zt-busway { background: rgba(249,115,22,0.08) !important; color: #ea580c !important; border-color: rgba(249,115,22,0.3) !important; }
+        html:not(.dark) .zt-bicycle { background: rgba(6,182,212,0.08) !important; color: #0891b2 !important; border-color: rgba(6,182,212,0.3) !important; }
+        html:not(.dark) .zt-bus_stop { background: rgba(16,185,129,0.08) !important; color: #059669 !important; border-color: rgba(16,185,129,0.3) !important; }
+        html:not(.dark) .zt-wrong_way { background: rgba(168,85,247,0.08) !important; color: #9333ea !important; border-color: rgba(168,85,247,0.3) !important; }
+        
+        /* Leaflet popups inside Light Mode maps */
+        html:not(.dark) .leaflet-popup-tip { background: #ffffff !important; }
+        html:not(.dark) .leaflet-popup-content-wrapper > div { background: #ffffff !important; border: 1px solid rgba(0,0,0,0.08) !important; box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important; }
+        html:not(.dark) .leaflet-popup-content-wrapper > div div { color: #0f172a !important; }
+        html:not(.dark) .leaflet-popup-content-wrapper > div span { color: #ffffff !important; }
+
+        /* Synchronized gradients and background transparency in Light Mode */
+        html:not(.dark) .bg-gradient-to-b {
+            background-image: none !important;
+            background-color: #ffffff !important;
+        }
+        html:not(.dark) [class*="bg-slate-900/"],
+        html:not(.dark) [class*="bg-slate-800/"],
+        html:not(.dark) [class*="bg-slate-850/"],
+        html:not(.dark) [class*="bg-slate-700/"],
+        html:not(.dark) [class*="bg-slate-600/"],
+        html:not(.dark) [class*="bg-slate-950/"] {
+            background-color: rgba(15, 23, 42, 0.05) !important;
+        }
+
+        /* Settings card page fixes for Light Mode */
+        html:not(.dark) .setting-card {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-color: rgba(0, 0, 0, 0.06) !important;
+        }
+        html:not(.dark) .setting-label {
+            color: #475569 !important;
+        }
+        html:not(.dark) .setting-desc {
+            color: #64748b !important;
+        }
+        html:not(.dark) .section-title {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .model-card {
+            border-color: rgba(0, 0, 0, 0.08) !important;
+            background: rgba(0, 0, 0, 0.02) !important;
+        }
+        html:not(.dark) .model-card:hover {
+            border-color: rgba(56, 189, 248, 0.3) !important;
+            background: rgba(56, 189, 248, 0.05) !important;
+        }
+        html:not(.dark) .model-card.active {
+            border-color: rgba(16, 185, 129, 0.5) !important;
+            background: rgba(16, 185, 129, 0.08) !important;
+        }
+        html:not(.dark) .input-surface {
+            color: #0f172a !important;
+        }
+
+        /* Leaflet inline-styled popup content overrides for Light Mode */
+        html:not(.dark) .leaflet-popup-content div[style*="background:#0f172a"] {
+            background: #ffffff !important;
+            border-color: rgba(0,0,0,0.08) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+        }
+        html:not(.dark) .leaflet-popup-content div[style*="color:#f1f5f9"] {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .leaflet-popup-content div[style*="color:#94a3b8"] {
+            color: #475569 !important;
+        }
     </style>
     {% block style_extra %}{% endblock %}
 </head>
 <body class="min-h-screen overflow-x-hidden">
     <div class="flex min-h-screen flex-col md:flex-row p-3 md:p-4 gap-3 md:gap-4">
-        <aside class="w-[min(18rem,calc(100vw-1.5rem))] md:w-72 glass-sidebar flex flex-col z-30 fixed top-3 bottom-3 left-3 md:relative md:top-auto md:bottom-auto md:left-auto md:h-auto transform transition-[transform,width] duration-300 -translate-x-[110%] md:translate-x-0" id="sidebar">
-            <div class="h-16 flex items-center px-5">
+        <aside class="w-[min(18rem,calc(100vw-1.5rem))] md:w-64 glass-sidebar flex flex-col z-30 fixed top-3 bottom-3 left-3 transform transition-[transform,width] duration-300 -translate-x-[110%] md:translate-x-0" id="sidebar">
+            <div class="h-16 flex items-center px-4">
                 <a href="/" class="flex items-center gap-3 w-full">
-                    <div class="h-10 w-10 rounded-xl bg-slate-900/40 border border-white/10 flex items-center justify-center shadow-inner">
-                        <img src="/static/img/logo.png" alt="PADI Logo" class="h-7 w-auto">
+                    <div class="h-10 w-10 rounded-xl bg-slate-900/60 border border-white/10 flex items-center justify-center shadow-inner flex-shrink-0">
+                        <img src="/static/img/logo.png" alt="PADI" class="h-7 w-auto">
                     </div>
                     <div class="leading-tight sidebar-text">
-                        <div class="text-white font-semibold text-sm tracking-tight">PADI</div>
-                        <div class="text-[10px] text-slate-500 uppercase tracking-widest">Platform Adaptive Deteksi Indonesia</div>
+                        <div class="text-white font-bold text-sm tracking-tight">PADI</div>
+                        <div class="text-[9px] text-slate-500 uppercase tracking-[0.12em]">Platform Adaptive Deteksi Indonesia</div>
                     </div>
                     <div class="ml-auto sidebar-text">
-                        <span class="inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+                        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     </div>
                 </a>
+            </div>
+            <div class="px-4 mb-2 sidebar-text">
+                <span class="px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-[10px] uppercase tracking-wider">Demo Mode</span>
             </div>
             <div class="flex-1 overflow-y-auto px-4 pb-5">
                 {% set current_path = request.path if request is defined else '' %}
@@ -154,6 +665,10 @@
                     <i class="fas fa-map-location-dot w-5 opacity-80"></i>
                     <span class="sidebar-text">Dashboard</span>
                 </a>
+                <a href="/livemap" class="nav-link mb-1 {{ 'active' if current_path.startswith('/livemap') else '' }}">
+                    <i class="fas fa-satellite-dish w-5 opacity-80"></i>
+                    <span class="sidebar-text">Live Map</span>
+                </a>
                 <a href="/enforcement" class="nav-link mb-1 {{ 'active' if current_path.startswith('/enforcement') else '' }}">
                     <i class="fas fa-shield-halved w-5 opacity-80"></i>
                     <span class="sidebar-text">Enforcement</span>
@@ -161,6 +676,10 @@
                 <a href="/cameras" class="nav-link mb-1 {{ 'active' if current_path.startswith('/cameras') else '' }}">
                     <i class="fas fa-video w-5 opacity-80"></i>
                     <span class="sidebar-text">Kamera</span>
+                </a>
+                <a href="/add_camera" class="nav-link mb-1 pl-6 text-xs {{ 'active' if current_path.startswith('/add_camera') else '' }}">
+                    <i class="fas fa-plus w-4 opacity-60"></i>
+                    <span class="sidebar-text">Tambah Kamera</span>
                 </a>
                 <a href="/zones" class="nav-link mb-1 {{ 'active' if current_path.startswith('/zones') else '' }}">
                     <i class="fas fa-draw-polygon w-5 opacity-80"></i>
@@ -194,30 +713,37 @@
                         </div>
                         <div class="text-[10px] text-slate-500 mt-1">AI Engine: Ready</div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-slate-200 font-semibold tabular-nums" id="current-time">--:--</div>
-                        <div class="text-[10px] text-slate-500 uppercase tracking-wider" id="current-date">--/--/----</div>
-                    </div>
                 </div>
             </div>
         </aside>
         <div id="sidebar-overlay" class="fixed inset-0 bg-black/55 z-20 hidden md:hidden"></div>
-        <main class="flex-1 flex flex-col min-w-0 md:min-h-0">
-            <header class="glass-header flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6 md:h-16 z-10 shrink-0">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <button id="sidebar-toggle" class="md:hidden text-slate-400 hover:text-white transition-colors">
+        <main class="flex-1 flex flex-col min-w-0 md:min-h-0 md:ml-[17rem]">
+            <header class="flex items-center justify-between gap-4 px-4 py-3 md:px-6 md:py-4 z-10 shrink-0 mb-6 bg-white dark:bg-slate-900 border border-slate-100/60 dark:border-slate-800 rounded-[1.25rem] shadow-sm transition-colors">
+                <div class="flex items-center gap-4 min-w-0 flex-1">
+                    <button id="sidebar-toggle" class="md:hidden text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors">
                         <i class="fas fa-bars text-xl"></i>
                     </button>
-                    <button id="sidebar-collapse" class="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition-colors" title="Collapse Sidebar" aria-label="Collapse Sidebar">
-                        <i class="fas fa-angles-left"></i>
+                    <button id="sidebar-collapse" class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900 shadow-sm flex-shrink-0" title="Collapse Sidebar" aria-label="Collapse Sidebar">
+                        <i class="fas fa-angles-right text-xs"></i>
                     </button>
-                    <div class="min-w-0">
-                        <div class="text-[11px] text-slate-500 uppercase tracking-wider">{% block header_kicker %}{% endblock %}</div>
-                        <div class="text-white font-semibold truncate">{% block header_title %}{% endblock %}</div>
+                    <div class="min-w-0 flex items-center gap-3.5">
+                        {% block header_icon %}{% endblock %}
+                        <div class="flex flex-col justify-center">
+                            <div class="text-[10px] font-bold tracking-[0.12em] text-slate-400 dark:text-slate-500 uppercase leading-none mb-1.5">{% block header_kicker %}{% endblock %}</div>
+                            <div class="text-slate-800 dark:text-white font-bold text-lg leading-none truncate">{% block header_title %}{% endblock %}</div>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
+                <div class="flex items-center gap-4">
                     {% block header_actions %}{% endblock %}
+                    <!-- Theme Toggle Button -->
+                    <button id="theme-toggle" class="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900 shadow-sm" title="Toggle Light/Dark Theme">
+                        <i class="fas fa-moon text-xs" id="theme-toggle-icon"></i>
+                    </button>
+                    <div class="hidden sm:flex flex-col items-end justify-center pl-5 border-l border-slate-200 dark:border-slate-700">
+                        <div class="text-slate-800 dark:text-white font-bold text-[13px] leading-none tabular-nums mb-1.5" id="current-time">--:--</div>
+                        <div class="text-[9px] font-semibold text-slate-400 dark:text-slate-500 leading-none tracking-wider" id="current-date">--/--/----</div>
+                    </div>
                 </div>
             </header>
             <div class="flex-1 overflow-y-auto p-3 md:p-6 relative min-w-0" id="main-scroll">
@@ -239,7 +765,7 @@
                     <div class="min-w-0">
                         <div class="text-white font-semibold text-sm truncate">PADI Assistant</div>
                         <div class="text-[11px] text-slate-400 truncate flex items-center gap-2">
-                            <span>Tanya statistik, kamera, dan export</span>
+                            <span>Traffic monitoring & enforcement assistant</span>
                             <span class="inline-flex items-center gap-1.5">
                                 <span id="chatbot-llm-dot" class="inline-flex h-2 w-2 rounded-full bg-slate-500"></span>
                                 <span id="chatbot-llm-text" class="text-[11px] text-slate-500">LLM: off</span>
@@ -327,6 +853,35 @@
             } catch {}
             updateClock();
             setInterval(updateClock, 1000);
+
+            // Theme Switcher Logic
+            const themeToggleBtn = document.getElementById('theme-toggle');
+            const themeToggleIcon = document.getElementById('theme-toggle-icon');
+            
+            const updateThemeUI = () => {
+                const isDark = document.documentElement.classList.contains('dark');
+                if (themeToggleIcon) {
+                    themeToggleIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+                }
+                if (themeToggleBtn) {
+                    themeToggleBtn.title = isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme';
+                }
+            };
+
+            if (themeToggleBtn) {
+                themeToggleBtn.addEventListener('click', () => {
+                    const isDark = document.documentElement.classList.toggle('dark');
+                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                    updateThemeUI();
+                    
+                    // Dispatch custom event to notify other scripts (like Leaflet maps)
+                    window.dispatchEvent(new CustomEvent('themechanged', { detail: { isDark } }));
+                });
+                
+                // Initial sync
+                updateThemeUI();
+            }
+            window.addEventListener('themechanged', updateThemeUI);
         })();
     </script>
     <script>
@@ -586,7 +1141,7 @@
                     }
                     if (!greeted) {
                         greeted = true;
-                        addMessage('assistant', 'Halo! Aku bisa bantu cek total 30 hari, status kamera, top kamera, dan panduan export CSV.\nContoh: "total 30 hari" atau "status kamera".');
+                        addMessage('assistant', 'Halo! Saya PADI Assistant.\n\nSaya bisa membantu:\n• Status kamera & traffic real-time\n• Data pelanggaran (parkir liar, busway, lawan arah)\n• Analisis hotspot & rekomendasi\n• Export data CSV\n\nSilakan tanya apa saja tentang sistem monitoring ini.');
                     }
                     setTimeout(() => input.focus(), 50);
                 } else {
@@ -680,5 +1235,36 @@
         })();
     </script>
     {% block scripts %}{% endblock %}
+    <!-- Demo Mode Protection — only block actions, not page viewing -->
+    <script>
+    (function(){
+        // Disable right-click
+        document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+        // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+        document.addEventListener('keydown', function(e){
+            if(e.key==='F12') { e.preventDefault(); return false; }
+            if(e.ctrlKey && e.shiftKey && (e.key==='I'||e.key==='i'||e.key==='J'||e.key==='j'||e.key==='C'||e.key==='c')) { e.preventDefault(); return false; }
+            if(e.ctrlKey && (e.key==='U'||e.key==='u')) { e.preventDefault(); return false; }
+        });
+
+        // Demo Mode: require password for destructive actions
+        const DEMO_PASS = '@sterion1';
+        let demoUnlocked = false;
+        
+        window.demoCheck = function(actionName) {
+            if (demoUnlocked) return true;
+            const pw = prompt('Demo Mode — Masukkan password untuk: ' + actionName);
+            if (pw === DEMO_PASS) {
+                demoUnlocked = true;
+                return true;
+            }
+            if (pw !== null) alert('Password salah!');
+            return false;
+        };
+
+        // Custom Select — disabled (using native dark select via color-scheme: dark)
+        // Native select works reliably across all pages without conflicts
+    })();
+    </script>
 </body>
 </html>
